@@ -7,8 +7,8 @@ from pydantic import BaseModel, Field
 # Configuration models
 
 
-class ScanningConfig(BaseModel):
-    """Scanning configuration."""
+class ScannerConfig(BaseModel):
+    """Scanner configuration."""
 
     default_network: str = "192.168.1.0/24"
     port: int = Field(default=6053, ge=1, le=65535)
@@ -19,7 +19,7 @@ class ScanningConfig(BaseModel):
 class ESProConfig(BaseModel):
     """Main ESPro configuration."""
 
-    scanning: ScanningConfig = Field(default_factory=ScanningConfig)
+    scanning: ScannerConfig = Field(default_factory=ScannerConfig)
 
 
 # Device models

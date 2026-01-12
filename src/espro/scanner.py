@@ -7,17 +7,18 @@ import socket
 
 import aioesphomeapi
 
-from espro.models import PhysicalDevice
+from espro.models import PhysicalDevice, ScannerConfig
 
 logger = logging.getLogger(__name__)
 
 
-ESPHOME_PORT = 6053
-DEFAULT_TIMEOUT = 5.0
+CFG = ScannerConfig()
 
 
 async def check_device(
-    ip: str, port: int = ESPHOME_PORT, timeout: float = DEFAULT_TIMEOUT
+    ip: str,
+    port: int = CFG.port,
+    timeout: float = CFG.timeout,
 ) -> PhysicalDevice | None:
     """Check if an IP address has an ESPHome device and return its info."""
     logger.debug(f"Checking {ip}")
@@ -45,7 +46,9 @@ async def check_device(
 
 
 async def scan_network(
-    network: str, port: int = ESPHOME_PORT, timeout: float = DEFAULT_TIMEOUT
+    network: str,
+    port: int = CFG.port,
+    timeout: float = CFG.timeout,
 ) -> list[PhysicalDevice]:
     """Scan a network range for ESPHome devices."""
     net = ipaddress.ip_network(network, strict=False)

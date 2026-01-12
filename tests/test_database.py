@@ -1,14 +1,14 @@
 """Tests for Database class."""
 
 from espro.database import Database
-from espro.models import ESProConfig, PhysicalDevice, ScanningConfig
+from espro.models import ESProConfig, PhysicalDevice, ScannerConfig
 
 
 def test_config_roundtrip(tmp_path):
     """Test config save and load."""
     db = Database(tmp_path)
 
-    config = ESProConfig(scanning=ScanningConfig(default_network="10.0.0.0/24"))
+    config = ESProConfig(scanning=ScannerConfig(default_network="10.0.0.0/24"))
     db.save_config(config)
 
     loaded = db.get_config()
