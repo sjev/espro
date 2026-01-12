@@ -16,7 +16,7 @@ class ScanningConfig(BaseModel):
     parallel_scans: int = Field(default=50, ge=1, le=255)
 
 
-class EsProConfig(BaseModel):
+class ESProConfig(BaseModel):
     """Main ESPro configuration."""
 
     scanning: ScanningConfig = Field(default_factory=ScanningConfig)

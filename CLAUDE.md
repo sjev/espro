@@ -35,10 +35,11 @@ uv sync
 
 ```
 src/espro/
-├── __init__.py              # Package initialization
+├── __init__.py              # Package version (dynamic)
 ├── cli.py                   # Typer-based CLI with Rich output
 ├── database.py              # Main database facade
 ├── models.py                # Pydantic models (config + devices)
+├── services.py              # Business logic (validation, etc.)
 ├── storage.py               # ConfigLoader + PhysicalDeviceStorage
 ├── scanner.py               # ESPHome device discovery
 ├── logging.py               # Logging configuration
@@ -46,7 +47,8 @@ src/espro/
 
 tests/
 ├── test_espro.py            # CLI tests
-└── test_database.py         # Database tests
+├── test_database.py         # Database tests
+└── test_services.py         # Business logic tests
 ```
 
 ## Architecture

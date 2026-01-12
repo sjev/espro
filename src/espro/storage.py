@@ -9,7 +9,7 @@ import platformdirs
 import yaml
 from pydantic import ValidationError
 
-from espro.models import DeviceRegistry, EsProConfig, PhysicalDevice, ScanResult
+from espro.models import DeviceRegistry, ESProConfig, PhysicalDevice, ScanResult
 
 APP_NAME = "espro"
 CONFIG_FILE = "config.yaml"
@@ -63,20 +63,20 @@ class ConfigLoader:
         if not gitignore.exists():
             gitignore.write_text("*\n")
 
-    def load_config(self) -> EsProConfig:
+    def load_config(self) -> ESProConfig:
         """Load ESPro configuration from config.yaml."""
         if not self.config_path.exists():
-            return EsProConfig()
+            return ESProConfig()
 
         with open(self.config_path) as f:
             data = yaml.safe_load(f)
 
         try:
-            return EsProConfig.model_validate(data or {})
+            return ESProConfig.model_validate(data or {})
         except ValidationError as e:
             raise ValueError(f"Invalid config file: {self.config_path}\n{e}") from e
 
-    def save_config(self, config: EsProConfig) -> None:
+    def save_config(self, config: ESProConfig) -> None:
         """Save ESPro configuration to config.yaml."""
         self.ensure_dirs()
         with open(self.config_path, "w") as f:
@@ -118,7 +118,7 @@ class ConfigLoader:
         self.ensure_dirs()
 
         if not self.config_path.exists():
-            config = EsProConfig()
+            config = ESProConfig()
             self.save_config(config)
 
         if not self.devices_path.exists():

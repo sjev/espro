@@ -5,7 +5,7 @@ from pathlib import Path
 
 from espro.models import (
     DeviceRegistry,
-    EsProConfig,
+    ESProConfig,
     LogicalDevice,
     PhysicalDevice,
     ScanResult,
@@ -43,11 +43,11 @@ class Database:
         return self._loader.db_dir
 
     # Configuration
-    def get_config(self) -> EsProConfig:
+    def get_config(self) -> ESProConfig:
         """Load ESPro configuration."""
         return self._loader.load_config()
 
-    def save_config(self, config: EsProConfig) -> None:
+    def save_config(self, config: ESProConfig) -> None:
         """Save ESPro configuration."""
         self._loader.save_config(config)
 

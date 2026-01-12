@@ -11,6 +11,7 @@ from espro import __version__
 from espro.database import Database
 from espro.logging import setup_logging
 from espro.scanner import scan_network
+from espro.services import validate_mappings
 
 setup_logging()
 
@@ -217,68 +218,37 @@ def validate() -> None:
         console.print("[yellow]⚠[/yellow] No logical devices defined.")
         return
 
-    # Build lookup maps
-    physical_by_ip = {d.ip: d for d in current_scan.devices}
-    physical_by_name = {d.name: d for d in current_scan.devices}
+    result = validate_mappings(registry, current_scan)
 
-    errors: list[str] = []
-    warnings: list[str] = []
-    ok_count = 0
-
-    for logical_name, logical_device in registry.logical_devices.items():
-        physical_ref = logical_device.physical
-
-        # Check if it's an IP or hostname
-        found = None
-        if physical_ref in physical_by_ip:
-            found = physical_by_ip[physical_ref]
-        elif physical_ref in physical_by_name:
-            found = physical_by_name[physical_ref]
-        elif physical_ref.replace(".local", "") in physical_by_name:
-            # Try without .local suffix
-            found = physical_by_name[physical_ref.replace(".local", "")]
-
-        if found:
-            ok_count += 1
-        else:
-            errors.append(
-                f"Logical device '{logical_name}' points to '{physical_ref}' which was not found in scan"
-            )
-
-    # Report results
-    if errors:
+    # Report errors
+    if result.errors:
         console.print("[red]✗[/red] Validation errors:\n")
-        for error in errors:
+        for error in result.errors:
             console.print(f"  [red]•[/red] {error}")
         console.print()
 
-    if warnings:
+    # Report warnings
+    if result.warnings:
         console.print("[yellow]⚠[/yellow] Warnings:\n")
-        for warning in warnings:
+        for warning in result.warnings:
             console.print(f"  [yellow]•[/yellow] {warning}")
         console.print()
 
-    if ok_count > 0:
-        console.print(f"[green]✓[/green] {ok_count} device(s) validated successfully")
+    # Report successes
+    if result.valid_count > 0:
+        console.print(
+            f"[green]✓[/green] {result.valid_count} device(s) validated successfully"
+        )
 
     # Show unmapped physical devices
-    mapped_devices = set()
-    for logical_device in registry.logical_devices.values():
-        ref = logical_device.physical
-        if ref in physical_by_ip:
-            mapped_devices.add(physical_by_ip[ref].name)
-        elif ref in physical_by_name:
-            mapped_devices.add(ref)
-        elif ref.replace(".local", "") in physical_by_name:
-            mapped_devices.add(ref.replace(".local", ""))
+    if result.unmapped_devices:
+        console.print(
+            f"\n[blue]i[/blue] {len(result.unmapped_devices)} unmapped physical device(s):"
+        )
+        for name, ip in result.unmapped_devices:
+            console.print(f"  • {name} ({ip})")
 
-    unmapped = [d for d in current_scan.devices if d.name not in mapped_devices]
-    if unmapped:
-        console.print(f"\n[blue]i[/blue] {len(unmapped)} unmapped physical device(s):")
-        for device in unmapped:
-            console.print(f"  • {device.name} ({device.ip})")
-
-    if errors:
+    if result.errors:
         raise typer.Exit(1)
 
 
