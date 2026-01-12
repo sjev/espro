@@ -3,15 +3,14 @@
 import os
 from pathlib import Path
 
-from espro.config.loader import ConfigLoader
-from espro.models.config import EsProConfig
-from espro.models.device import (
+from espro.models import (
     DeviceRegistry,
+    EsProConfig,
     LogicalDevice,
     PhysicalDevice,
     ScanResult,
 )
-from espro.storage.physical import PhysicalDeviceStorage
+from espro.storage import ConfigLoader, PhysicalDeviceStorage
 
 
 class Database:
@@ -36,7 +35,7 @@ class Database:
         self._loader = ConfigLoader()
         self._loader.ensure_dirs()
 
-        self._physical_storage = PhysicalDeviceStorage(self._loader._physical_dir)
+        self._physical_storage = PhysicalDeviceStorage(self._loader.physical_dir)
 
     @property
     def path(self) -> Path:

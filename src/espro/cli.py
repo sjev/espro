@@ -10,7 +10,7 @@ from rich.table import Table
 from espro import __version__
 from espro.database import Database
 from espro.logging import setup_logging
-from espro.scanner import scan_network, to_physical_device
+from espro.scanner import scan_network
 
 setup_logging()
 
@@ -108,8 +108,7 @@ def scan(
     console.print(f"\n[green]Found {len(devices)} device(s)[/green]")
 
     if save:
-        physical_devices = [to_physical_device(d) for d in devices]
-        db.save_scan(physical_devices, network)
+        db.save_scan(devices, network)
         console.print(f"[green]✓[/green] Saved scan results to {db.path}")
 
 

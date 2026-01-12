@@ -37,13 +37,16 @@ uv sync
 src/espro/
 ├── __init__.py              # Package initialization
 ├── cli.py                   # Typer-based CLI with Rich output
-├── core.py                  # Core functionality (placeholder)
+├── database.py              # Main database facade
+├── models.py                # Pydantic models (config + devices)
+├── storage.py               # ConfigLoader + PhysicalDeviceStorage
 ├── scanner.py               # ESPHome device discovery
 ├── logging.py               # Logging configuration
 └── py.typed                 # Type hints marker
 
 tests/
-└── test_espro.py            # Test suite
+├── test_espro.py            # CLI tests
+└── test_database.py         # Database tests
 ```
 
 ## Architecture
@@ -52,12 +55,25 @@ tests/
 - Uses `aioesphomeapi` to communicate with ESPHome devices on port 6053
 - `scan_network()`: Async concurrent scanning of CIDR ranges
 - `detect_local_network()`: Auto-detects local /24 subnet
-- Returns `ESPHomeDevice` dataclass with device metadata
+- Returns `PhysicalDevice` pydantic model
+
+### Data Models (models.py)
+- `EsProConfig` / `ScanningConfig`: Configuration settings
+- `PhysicalDevice`: Discovered ESPHome device info
+- `LogicalDevice` / `DeviceRegistry`: Logical-to-physical mappings
+
+### Storage (storage.py)
+- `ConfigLoader`: Handles YAML config and device registry files
+- `PhysicalDeviceStorage`: Manages scan result JSON files
+- Database path: `ESPRO_DB` env var or `~/.local/share/espro`
+
+### Database (database.py)
+- Facade providing unified API over ConfigLoader + PhysicalDeviceStorage
+- Main entry point for CLI commands
 
 ### CLI Structure (cli.py)
-- Built with Typer for command hierarchy: `espro devices scan`
-- Rich library for formatted table output
-- Commands are grouped into sub-apps (e.g., `devices_app`)
+- Built with Typer, Rich for formatted output
+- Commands: init, scan, list, add, remove, info, validate
 
 ### Logging (logging.py)
 - Uses `coloredlogs` for colored terminal output

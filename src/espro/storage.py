@@ -1,14 +1,19 @@
-"""Configuration loader following nora patterns."""
+"""Configuration and storage management."""
 
+import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 import platformdirs
 import yaml
 from pydantic import ValidationError
 
-from espro.models.config import EsProConfig
-from espro.models.device import DeviceRegistry
+from espro.models import DeviceRegistry, EsProConfig, PhysicalDevice, ScanResult
+
+APP_NAME = "espro"
+CONFIG_FILE = "config.yaml"
+DEVICES_FILE = "devices.yaml"
 
 
 class ConfigLoader:
@@ -19,14 +24,10 @@ class ConfigLoader:
     2. platformdirs.user_data_dir("espro") - default
     """
 
-    APP_NAME = "espro"
-    CONFIG_FILE = "config.yaml"
-    DEVICES_FILE = "devices.yaml"
-
     def __init__(self) -> None:
         """Initialize config loader."""
         self._db_dir = Path(
-            os.environ.get("ESPRO_DB") or platformdirs.user_data_dir(self.APP_NAME)
+            os.environ.get("ESPRO_DB") or platformdirs.user_data_dir(APP_NAME)
         )
         self._physical_dir = self._db_dir / "physical"
         self._cache_dir = self._db_dir / "cache"
@@ -37,19 +38,19 @@ class ConfigLoader:
         return self._db_dir
 
     @property
+    def physical_dir(self) -> Path:
+        """Get physical devices directory path."""
+        return self._physical_dir
+
+    @property
     def config_path(self) -> Path:
         """Path to config.yaml."""
-        return self._db_dir / self.CONFIG_FILE
+        return self._db_dir / CONFIG_FILE
 
     @property
     def devices_path(self) -> Path:
         """Path to devices.yaml."""
-        return self._db_dir / self.DEVICES_FILE
-
-    @property
-    def current_scan_path(self) -> Path:
-        """Path to current scan results."""
-        return self._physical_dir / "current.json"
+        return self._db_dir / DEVICES_FILE
 
     def ensure_dirs(self) -> None:
         """Create directory structure if missing."""
@@ -123,3 +124,33 @@ class ConfigLoader:
         if not self.devices_path.exists():
             registry = DeviceRegistry()
             self.save_devices(registry)
+
+
+class PhysicalDeviceStorage:
+    """Storage for physical device scan results."""
+
+    def __init__(self, physical_dir: Path) -> None:
+        self.physical_dir = physical_dir
+        self.current_path = physical_dir / "current.json"
+
+    def save_scan(self, devices: list[PhysicalDevice], network: str) -> None:
+        """Save scan results to current.json."""
+        scan = ScanResult(
+            scan_timestamp=datetime.now(timezone.utc),
+            network=network,
+            devices=devices,
+        )
+
+        self.physical_dir.mkdir(parents=True, exist_ok=True)
+        with open(self.current_path, "w") as f:
+            json.dump(scan.model_dump(mode="json"), f, indent=2)
+
+    def load_current(self) -> ScanResult | None:
+        """Load current scan results."""
+        if not self.current_path.exists():
+            return None
+
+        with open(self.current_path) as f:
+            data = json.load(f)
+
+        return ScanResult.model_validate(data)

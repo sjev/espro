@@ -4,13 +4,10 @@ import asyncio
 import ipaddress
 import logging
 import socket
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 import aioesphomeapi
 
-if TYPE_CHECKING:
-    from espro.models.device import PhysicalDevice
+from espro.models import PhysicalDevice
 
 logger = logging.getLogger(__name__)
 
@@ -19,21 +16,9 @@ ESPHOME_PORT = 6053
 DEFAULT_TIMEOUT = 5.0
 
 
-@dataclass
-class ESPHomeDevice:
-    """Information about a discovered ESPHome device."""
-
-    ip: str
-    name: str
-    friendly_name: str
-    mac_address: str
-    model: str
-    esphome_version: str
-
-
 async def check_device(
     ip: str, port: int = ESPHOME_PORT, timeout: float = DEFAULT_TIMEOUT
-) -> ESPHomeDevice | None:
+) -> PhysicalDevice | None:
     """Check if an IP address has an ESPHome device and return its info."""
     logger.debug(f"Checking {ip}")
     try:
@@ -41,7 +26,7 @@ async def check_device(
         await asyncio.wait_for(api.connect(login=True), timeout=timeout)
         info = await api.device_info()
         await api.disconnect()
-        device = ESPHomeDevice(
+        device = PhysicalDevice(
             ip=ip,
             name=info.name,
             friendly_name=info.friendly_name,
@@ -61,7 +46,7 @@ async def check_device(
 
 async def scan_network(
     network: str, port: int = ESPHOME_PORT, timeout: float = DEFAULT_TIMEOUT
-) -> list[ESPHomeDevice]:
+) -> list[PhysicalDevice]:
     """Scan a network range for ESPHome devices."""
     net = ipaddress.ip_network(network, strict=False)
     hosts = list(net.hosts())
@@ -86,17 +71,3 @@ def detect_local_network() -> str:
         return str(network)
     except OSError as e:
         raise RuntimeError("Could not detect local network") from e
-
-
-def to_physical_device(device: ESPHomeDevice) -> "PhysicalDevice":
-    """Convert ESPHomeDevice to PhysicalDevice model."""
-    from espro.models.device import PhysicalDevice
-
-    return PhysicalDevice(
-        ip=device.ip,
-        name=device.name,
-        friendly_name=device.friendly_name,
-        mac_address=device.mac_address,
-        model=device.model,
-        esphome_version=device.esphome_version,
-    )
