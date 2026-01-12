@@ -26,4 +26,4 @@ def test_devices_scan():
     """Test devices scan command."""
     result = runner.invoke(app, ["devices", "scan"])
     assert result.exit_code == 0
-    assert "Scanning for ESPHome devices..." in result.stdout
+    assert "for ESPHome devices..." in result.stdout

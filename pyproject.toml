@@ -8,6 +8,8 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "aioesphomeapi>=29.0.0",
+    "coloredlogs>=15.0",
     "typer>=0.15.0",
 ]
 

@@ -13,7 +13,7 @@ ESPHome ties device identity to physical hardware. When a broken device gets rep
 - Automations need manual updates
 - 30+ minutes of recovery work per device
 
-For professional installers managing outdoor or industrial deployments, hardware failures are routine—not exceptional.
+This tool aims to simplify device comissioning and management for professional installers and power users who want to treat home infrastructure as code.
 
 ## The Solution
 
