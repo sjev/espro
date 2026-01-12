@@ -7,7 +7,10 @@ from rich.console import Console
 from rich.table import Table
 
 from espro import __version__
+from espro.logging import setup_logging
 from espro.scanner import detect_local_network, scan_network
+
+setup_logging()
 
 app = typer.Typer(
     help="ESPro - Professional ESPHome infrastructure manager", no_args_is_help=True

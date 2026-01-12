@@ -8,12 +8,8 @@ from dataclasses import dataclass
 
 import aioesphomeapi
 
-from espro.logging import suppress_logger
-
 logger = logging.getLogger(__name__)
 
-# Suppress noisy connection errors from aioesphomeapi during scanning
-suppress_logger("aioesphomeapi")
 
 ESPHOME_PORT = 6053
 DEFAULT_TIMEOUT = 5.0
