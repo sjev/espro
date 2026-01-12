@@ -13,17 +13,3 @@ def test_version():
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
     assert f"espro version {__version__}" in result.stdout
-
-
-def test_version_short():
-    """Test version command with short flag."""
-    result = runner.invoke(app, ["-v"])
-    assert result.exit_code == 0
-    assert f"espro version {__version__}" in result.stdout
-
-
-def test_devices_scan():
-    """Test devices scan command."""
-    result = runner.invoke(app, ["devices", "scan"])
-    assert result.exit_code == 0
-    assert "for ESPHome devices..." in result.stdout

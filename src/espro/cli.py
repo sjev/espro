@@ -1,22 +1,22 @@
 """CLI for espro."""
 
 import asyncio
+from pathlib import Path
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from espro import __version__
+from espro.database import Database
 from espro.logging import setup_logging
-from espro.scanner import detect_local_network, scan_network
+from espro.scanner import scan_network, to_physical_device
 
 setup_logging()
 
 app = typer.Typer(
     help="ESPro - Professional ESPHome infrastructure manager", no_args_is_help=True
 )
-devices_app = typer.Typer(help="Device management commands", no_args_is_help=True)
-app.add_typer(devices_app, name="devices")
 
 
 def version_callback(value: bool) -> None:
@@ -38,26 +38,46 @@ def main(
     ),
 ) -> None:
     """ESPro CLI."""
-    pass
 
 
-@devices_app.command("scan")
-def devices_scan(
-    network: str = typer.Argument(
+@app.command()
+def init(
+    path: str | None = typer.Option(
         None,
-        help="Network to scan (e.g., 192.168.1.0/24). Auto-detects if not provided.",
+        "--path",
+        help="Custom database directory (overrides ESPRO_DB)",
     ),
+) -> None:
+    """Initialize ESPro database with default configuration."""
+    console = Console()
+
+    db = Database(Path(path) if path else None)
+    db.init()
+
+    console.print(f"[green]✓[/green] Initialized ESPro database at: {db.path}")
+    console.print("\nCreated:")
+    console.print(f"  • {db.path / 'config.yaml'} - Configuration")
+    console.print(f"  • {db.path / 'devices.yaml'} - Device registry")
+
+
+@app.command()
+def scan(
+    network: str | None = typer.Argument(
+        None,
+        help="Network to scan (e.g., 192.168.1.0/24). Uses config.yaml default if omitted.",
+    ),
+    save: bool = typer.Option(True, help="Save scan results to database"),
 ) -> None:
     """Scan network for ESPHome devices."""
     console = Console()
 
+    db = Database()
+
+    # Get network from argument or config
     if network is None:
-        try:
-            network = detect_local_network()
-            console.print(f"Auto-detected network: {network}")
-        except RuntimeError as e:
-            console.print(f"[red]Error:[/red] {e}")
-            raise typer.Exit(1) from None
+        config = db.get_config()
+        network = config.scanning.default_network
+        console.print(f"Using network from config: {network}")
 
     console.print(f"Scanning {network} for ESPHome devices...")
     devices = asyncio.run(scan_network(network))
@@ -85,6 +105,182 @@ def devices_scan(
         )
 
     console.print(table)
+    console.print(f"\n[green]Found {len(devices)} device(s)[/green]")
+
+    if save:
+        physical_devices = [to_physical_device(d) for d in devices]
+        db.save_scan(physical_devices, network)
+        console.print(f"[green]✓[/green] Saved scan results to {db.path}")
+
+
+@app.command("list")
+def list_devices() -> None:
+    """List logical device mappings."""
+    db = Database()
+    registry = db.get_devices()
+
+    console = Console()
+
+    if not registry.logical_devices:
+        console.print("No logical devices defined.")
+        console.print(
+            f"Use 'espro add' to create mappings or edit {db.path / 'devices.yaml'}"
+        )
+        return
+
+    table = Table()
+    table.add_column("Logical Name", style="cyan")
+    table.add_column("Physical Device", style="green")
+    table.add_column("Notes")
+
+    for name, device in sorted(registry.logical_devices.items()):
+        table.add_row(name, device.physical, device.notes or "")
+
+    console.print(table)
+
+
+@app.command()
+def add(
+    name: str = typer.Argument(..., help="Logical device name"),
+    physical: str = typer.Argument(..., help="Physical device (hostname or IP)"),
+    notes: str | None = typer.Option(None, "--notes", help="Optional notes"),
+) -> None:
+    """Add or update a logical device mapping."""
+    db = Database()
+    db.add_logical_device(name, physical, notes)
+
+    console = Console()
+    console.print(f"[green]✓[/green] Mapped '{name}' → '{physical}'")
+
+
+@app.command()
+def remove(
+    name: str = typer.Argument(..., help="Logical device name"),
+) -> None:
+    """Remove a logical device mapping."""
+    db = Database()
+
+    console = Console()
+    if db.remove_logical_device(name):
+        console.print(f"[green]✓[/green] Removed device '{name}'")
+    else:
+        console.print(f"[yellow]![/yellow] Device '{name}' not found")
+        raise typer.Exit(1)
+
+
+@app.command()
+def info() -> None:
+    """Show ESPro database info and statistics."""
+    db = Database()
+    config = db.get_config()
+    registry = db.get_devices()
+    current_scan = db.get_current_scan()
+
+    console = Console()
+
+    console.print("[bold]ESPro Database Info[/bold]\n")
+    console.print(f"Database path: {db.path}")
+    console.print(f"Config file: {db.path / 'config.yaml'}")
+    console.print(f"Devices file: {db.path / 'devices.yaml'}")
+
+    console.print("\n[bold]Configuration[/bold]")
+    console.print(f"Default network: {config.scanning.default_network}")
+    console.print(f"Port: {config.scanning.port}")
+    console.print(f"Timeout: {config.scanning.timeout}s")
+
+    console.print("\n[bold]Statistics[/bold]")
+    console.print(f"Logical devices: {len(registry.logical_devices)}")
+
+    if current_scan:
+        console.print(f"Last scan: {current_scan.scan_timestamp}")
+        console.print(f"Physical devices found: {len(current_scan.devices)}")
+        console.print(f"Scan network: {current_scan.network}")
+    else:
+        console.print("No scans recorded yet")
+
+
+@app.command()
+def validate() -> None:
+    """Validate logical device mappings against scan results."""
+    db = Database()
+    registry = db.get_devices()
+    current_scan = db.get_current_scan()
+
+    console = Console()
+
+    if not current_scan:
+        console.print(
+            "[yellow]⚠[/yellow] No scan results available. Run 'espro scan' first."
+        )
+        raise typer.Exit(1)
+
+    if not registry.logical_devices:
+        console.print("[yellow]⚠[/yellow] No logical devices defined.")
+        return
+
+    # Build lookup maps
+    physical_by_ip = {d.ip: d for d in current_scan.devices}
+    physical_by_name = {d.name: d for d in current_scan.devices}
+
+    errors: list[str] = []
+    warnings: list[str] = []
+    ok_count = 0
+
+    for logical_name, logical_device in registry.logical_devices.items():
+        physical_ref = logical_device.physical
+
+        # Check if it's an IP or hostname
+        found = None
+        if physical_ref in physical_by_ip:
+            found = physical_by_ip[physical_ref]
+        elif physical_ref in physical_by_name:
+            found = physical_by_name[physical_ref]
+        elif physical_ref.replace(".local", "") in physical_by_name:
+            # Try without .local suffix
+            found = physical_by_name[physical_ref.replace(".local", "")]
+
+        if found:
+            ok_count += 1
+        else:
+            errors.append(
+                f"Logical device '{logical_name}' points to '{physical_ref}' which was not found in scan"
+            )
+
+    # Report results
+    if errors:
+        console.print("[red]✗[/red] Validation errors:\n")
+        for error in errors:
+            console.print(f"  [red]•[/red] {error}")
+        console.print()
+
+    if warnings:
+        console.print("[yellow]⚠[/yellow] Warnings:\n")
+        for warning in warnings:
+            console.print(f"  [yellow]•[/yellow] {warning}")
+        console.print()
+
+    if ok_count > 0:
+        console.print(f"[green]✓[/green] {ok_count} device(s) validated successfully")
+
+    # Show unmapped physical devices
+    mapped_devices = set()
+    for logical_device in registry.logical_devices.values():
+        ref = logical_device.physical
+        if ref in physical_by_ip:
+            mapped_devices.add(physical_by_ip[ref].name)
+        elif ref in physical_by_name:
+            mapped_devices.add(ref)
+        elif ref.replace(".local", "") in physical_by_name:
+            mapped_devices.add(ref.replace(".local", ""))
+
+    unmapped = [d for d in current_scan.devices if d.name not in mapped_devices]
+    if unmapped:
+        console.print(f"\n[blue]i[/blue] {len(unmapped)} unmapped physical device(s):")
+        for device in unmapped:
+            console.print(f"  • {device.name} ({device.ip})")
+
+    if errors:
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":

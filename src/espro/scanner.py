@@ -5,8 +5,12 @@ import ipaddress
 import logging
 import socket
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import aioesphomeapi
+
+if TYPE_CHECKING:
+    from espro.models.device import PhysicalDevice
 
 logger = logging.getLogger(__name__)
 
@@ -82,3 +86,17 @@ def detect_local_network() -> str:
         return str(network)
     except OSError as e:
         raise RuntimeError("Could not detect local network") from e
+
+
+def to_physical_device(device: ESPHomeDevice) -> "PhysicalDevice":
+    """Convert ESPHomeDevice to PhysicalDevice model."""
+    from espro.models.device import PhysicalDevice
+
+    return PhysicalDevice(
+        ip=device.ip,
+        name=device.name,
+        friendly_name=device.friendly_name,
+        mac_address=device.mac_address,
+        model=device.model,
+        esphome_version=device.esphome_version,
+    )
