@@ -3,13 +3,8 @@
 import os
 from pathlib import Path
 
-from espro.models import (
-    DeviceRegistry,
-    ESProConfig,
-    LogicalDevice,
-    PhysicalDevice,
-    ScanResult,
-)
+from espro.config import ESProConfig
+from espro.models import DeviceRegistry, LogicalDevice, PhysicalDevice, ScanResult
 from espro.storage import ConfigLoader, PhysicalDeviceStorage
 
 

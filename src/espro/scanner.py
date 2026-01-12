@@ -7,7 +7,8 @@ import socket
 
 import aioesphomeapi
 
-from espro.models import PhysicalDevice, ScannerConfig
+from espro.config import ScannerConfig
+from espro.models import PhysicalDevice
 
 logger = logging.getLogger(__name__)
 

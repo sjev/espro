@@ -1,7 +1,8 @@
 """Tests for Database class."""
 
 from espro.database import Database
-from espro.models import ESProConfig, PhysicalDevice, ScannerConfig
+from espro.config import ESProConfig, ScannerConfig
+from espro.models import PhysicalDevice
 
 
 def test_config_roundtrip(tmp_path):

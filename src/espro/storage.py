@@ -9,7 +9,8 @@ import platformdirs
 import yaml
 from pydantic import ValidationError
 
-from espro.models import DeviceRegistry, ESProConfig, PhysicalDevice, ScanResult
+from espro.config import ESProConfig
+from espro.models import DeviceRegistry, PhysicalDevice, ScanResult
 
 APP_NAME = "espro"
 CONFIG_FILE = "config.yaml"
