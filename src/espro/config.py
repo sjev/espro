@@ -16,6 +16,3 @@ class ESProConfig(BaseModel):
     """Main ESPro configuration."""
 
     scanning: ScannerConfig = Field(default_factory=ScannerConfig)
-
-
-ScanningConfig = ScannerConfig
