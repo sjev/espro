@@ -1,5 +1,9 @@
 # temp files
 temp/
+*_cache/
+
+# tooling
+.claude/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
