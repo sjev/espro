@@ -1,4 +1,6 @@
 # type: ignore
+import os
+
 from invoke import task
 
 
@@ -48,3 +50,27 @@ def test(ctx):
     Run tests with coverage information.
     """
     ctx.run("pytest --cov=src --cov-report=term-missing", pty=True)
+
+
+@task
+def build_package(ctx):
+    """
+    Build package using uv.
+    """
+
+    ctx.run("rm -rf dist")
+    ctx.run("uv build")
+
+
+@task
+def release(ctx):
+    """Run CI, build package, and publish to PyPI using uv."""
+    token = os.getenv("PYPI_TOKEN")
+    if not token:
+        raise ValueError("PYPI_TOKEN environment variable is not set")
+
+    print("Building package...")
+    ctx.run("invoke build-package")
+
+    print("Publishing to PyPI...")
+    ctx.run(f"uv publish --token {token}")
