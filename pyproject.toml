@@ -1,7 +1,7 @@
 [project]
 name = "espro"
 version = "0.1.0"
-description = "Professional ESPHome infrastructure: manage devices without breaking entity IDs, automations, or dashboards"
+description = "ESPHome device control plane: registry, lifecycle, and stable logical identities (optional MQTT bridge)"
 readme = "README.md"
 authors = [
     { name = "Jev Kuznetsov", email = "jev.kuznetsov@gmail.com" }

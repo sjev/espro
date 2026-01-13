@@ -1,6 +1,6 @@
 # ESPro
 
-*ESPro turns physical ESPHome devices into swappable infrastructure beneath stable logical identities.*
+*ESPro is a control plane for ESPHome fleets: register, program, and operate devices behind stable logical identities (with an optional MQTT bridge).*
 
 
 
@@ -13,11 +13,13 @@ ESPHome ties device identity to physical hardware. When a broken device gets rep
 - Automations need manual updates
 - 30+ minutes of recovery work per device
 
-This tool aims to simplify device comissioning and management for professional installers and power users who want to treat home infrastructure as code.
+This tool aims to simplify device commissioning and management for professional installers and power users who want to treat home infrastructure as code.
 
 ## The Solution
 
-**Hardware abstraction layer for ESPHome.**
+**A control plane for ESPHome devices.**
+
+ESPro maintains a device registry (logical ↔ physical), supports lifecycle workflows (replacement, commissioning, programming), and can optionally expose devices into an MQTT domain.
 
 Home Assistant connects to stable logical devices (`outdoor_light_1`), not physical hardware. When a device breaks, update a config file and restart—entity IDs stay stable, automations keep working.
 ```yaml
@@ -35,8 +37,9 @@ Device dies? Change the IP, reload ESPro mappings. Done.
 ## Architecture
 ```
 Home Assistant (stable entity IDs)
+(or other consumers via MQTT)
     ↓
-ESPro (device registry + proxy)
+ESPro (device registry + control plane)
     ↓
 Physical ESPHome Devices (swappable)
 ```
@@ -55,7 +58,7 @@ Three layers with clear responsibilities:
 
 **Infrastructure as code**: Reproducible deployments. Version-controlled configuration. Offline-capable.
 
-**Unix philosophy**: Do one thing well—provide hardware abstraction. Don't replace ESPHome or Home Assistant.
+**Unix philosophy**: Do one thing well—provide a device registry + lifecycle control plane. Don't replace ESPHome, MQTT, or Home Assistant.
 
 ## Status
 

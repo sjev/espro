@@ -2,7 +2,7 @@
 
 This document collects recurring problems reported by users running ESPHome with Home Assistant, especially around device replacement, naming, and lifecycle management.
 
-These are exactly the problems a “Control Plane” between HA and ESPHome would solve.
+These are exactly the problems a “Control Plane”/registry layer between ESPHome and downstream consumers (Home Assistant and/or MQTT) would solve.
 
 ---
 
