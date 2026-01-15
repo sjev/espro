@@ -99,6 +99,11 @@ uv run espro add my_sensor test-device.local
 - Logical ↔ physical mapping in TOML
 - Validation and drift detection
 
+TODO:
+
+- switch from ip to mac-based mapping.
+- change scan from brute approach to mdns.
+
 **Phase 2: MQTT Bridge**
 - Expose logical devices to MQTT
 - Automatic re-routing on hardware changes
