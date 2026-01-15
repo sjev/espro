@@ -10,6 +10,7 @@ requires-python = ">=3.12"
 dependencies = [
     "aioesphomeapi>=29.0.0",
     "coloredlogs>=15.0",
+    "esphome>=2025.12.6",
     "pydantic>=2.0.0",
     "rich>=13.0",
     "typer>=0.15.0",

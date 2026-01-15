@@ -71,7 +71,12 @@ def scan(
             physical_col = f"{device.name} ({device.friendly_name})"
         else:
             physical_col = device.name
-        logical_col = physical_to_logical.get(device.name, "")
+        logical_col = (
+            physical_to_logical.get(device.ip)
+            or physical_to_logical.get(device.name)
+            or physical_to_logical.get(f"{device.name}.local")
+            or ""
+        )
         table.add_row(
             redactor.redact_ip(device.ip),
             physical_col,
