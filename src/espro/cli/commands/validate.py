@@ -3,9 +3,8 @@ from __future__ import annotations
 import typer
 from rich.console import Console
 
-from espro.commands import validate_mappings
-
-from .common import build_database, load_settings_or_exit
+from espro.cli.helpers import build_database, load_settings_or_exit
+from espro.core import validate_mappings
 
 
 def register(app: typer.Typer) -> None:

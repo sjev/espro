@@ -4,16 +4,16 @@ from typing import Annotated
 
 import typer
 
-from espro.utils.logging import setup_logging
+from espro.utils.log_setup import setup_logging
 
-from . import config as config_cmd
-from .devices import register as register_devices
-from .info import register as register_info
-from .init_cmd import register as register_init
-from .logs import register as register_logs
-from .mock import register as register_mock
-from .scan import register as register_scan
-from .validate import register as register_validate
+from .commands import config as config_cmd
+from .commands.device_logs import register as register_logs
+from .commands.devices import register as register_devices
+from .commands.info import register as register_info
+from .commands.init import register as register_init
+from .commands.mock import register as register_mock
+from .commands.scan import register as register_scan
+from .commands.validate import register as register_validate
 
 app = typer.Typer(
     help="ESPro - Professional ESPHome infrastructure manager", no_args_is_help=True

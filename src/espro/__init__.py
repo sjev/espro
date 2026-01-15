@@ -5,8 +5,8 @@ from __future__ import annotations
 from importlib.metadata import version
 
 from .config import DatabaseConfig, ScanningConfig, Settings, get_settings
+from .database import Database
 from .models import DeviceRegistry, LogicalDevice, PhysicalDevice, ScanResult
-from .storage import Database
 
 __all__ = [
     "Database",

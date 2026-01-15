@@ -7,10 +7,9 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from espro.commands import scan_network
+from espro.cli.helpers import build_database, load_settings_or_exit
+from espro.core import scan_network
 from espro.utils.redaction import Redactor
-
-from .common import build_database, load_settings_or_exit
 
 logger = logging.getLogger(__name__)
 

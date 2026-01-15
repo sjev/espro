@@ -119,7 +119,10 @@ class Database:
 
         return ScanResult.model_validate(data)
 
-    def init(self) -> None:
+    def init(self, force: bool = False) -> bool:
+        """Initialize data directory. Returns True if devices.toml was created."""
         self.ensure_dirs()
-        if not self._devices_path.exists():
+        if force or not self._devices_path.exists():
             self.save_devices(DeviceRegistry())
+            return True
+        return False

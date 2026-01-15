@@ -3,7 +3,11 @@ from __future__ import annotations
 import typer
 from rich.console import Console
 
-from .common import build_database, load_settings_or_exit, resolve_config_path_or_exit
+from espro.cli.helpers import (
+    build_database,
+    load_settings_or_exit,
+    resolve_config_path_or_exit,
+)
 
 
 def register(app: typer.Typer) -> None:

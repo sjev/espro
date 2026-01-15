@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from espro.commands import scan as scan_module
 from espro.config import ScanningConfig
+from espro.core import scanner as scan_module
 
 
 def test_check_device_disables_aioesphomeapi_log_errors(

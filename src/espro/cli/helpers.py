@@ -10,7 +10,7 @@ from espro.config import (
     get_settings,
     resolve_config_path,
 )
-from espro.storage import Database
+from espro.database import Database
 
 
 def load_settings_or_exit() -> Settings:

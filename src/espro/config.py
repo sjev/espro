@@ -1,3 +1,5 @@
+"""Configuration loading and XDG path resolution."""
+
 from __future__ import annotations
 
 import json
@@ -8,11 +10,34 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field, ValidationError
 
-from .paths import default_config_path, default_data_dir, expand_path
-
+# Constants
+APP_NAME = "espro"
+CONFIG_FILENAME = "config.toml"
 CONFIG_ENV_VAR = "ESPRO_CONFIG"
 
 
+# XDG path helpers
+def xdg_config_home() -> Path:
+    return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+
+
+def xdg_data_home() -> Path:
+    return Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+
+
+def default_config_path() -> Path:
+    return xdg_config_home() / APP_NAME / CONFIG_FILENAME
+
+
+def default_data_dir() -> Path:
+    return xdg_data_home() / APP_NAME
+
+
+def expand_path(value: str) -> Path:
+    return Path(os.path.expandvars(os.path.expanduser(value)))
+
+
+# Configuration models
 class DatabaseConfig(BaseModel):
     model_config = {"frozen": True, "extra": "forbid"}
 
@@ -35,6 +60,7 @@ class Settings(BaseModel):
     scanning: ScanningConfig = Field(default_factory=ScanningConfig)
 
 
+# Config loading functions
 def resolve_config_path(allow_missing: bool = False) -> tuple[Path, bool]:
     env_path = os.environ.get(CONFIG_ENV_VAR)
     if env_path:
@@ -96,3 +122,22 @@ def render_settings_toml(settings: Settings) -> str:
 def write_settings(settings: Settings, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(render_settings_toml(settings))
+
+
+__all__ = [
+    "APP_NAME",
+    "CONFIG_ENV_VAR",
+    "CONFIG_FILENAME",
+    "DatabaseConfig",
+    "ScanningConfig",
+    "Settings",
+    "data_dir_from_settings",
+    "default_config_path",
+    "default_data_dir",
+    "expand_path",
+    "get_settings",
+    "load_settings",
+    "render_settings_toml",
+    "resolve_config_path",
+    "write_settings",
+]

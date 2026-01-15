@@ -5,7 +5,7 @@ import asyncio
 import typer
 from rich.console import Console
 
-from espro.commands import run_mock_device
+from espro.core import run_mock_device
 
 
 def register(app: typer.Typer) -> None:
