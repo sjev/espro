@@ -8,6 +8,7 @@ from rich.console import Console
 from rich.table import Table
 
 from espro.commands import scan_network
+from espro.utils.redaction import Redactor
 
 from .common import build_database, load_settings_or_exit
 
@@ -25,6 +26,16 @@ def register(app: typer.Typer) -> None:
             ),
         ),
         save: bool = typer.Option(True, help="Save scan results to data directory"),
+        redact: bool = typer.Option(
+            True,
+            "--redact/--no-redact",
+            help="Redact sensitive values in output (default: on)",
+        ),
+        raw: bool = typer.Option(
+            False,
+            "--raw",
+            help="Disable redaction (alias for --no-redact)",
+        ),
     ) -> None:
         """Scan network for ESPHome devices."""
         console = Console()
@@ -48,6 +59,10 @@ def register(app: typer.Typer) -> None:
             console.print("No ESPHome devices found.")
             return
 
+        if raw:
+            redact = False
+
+        redactor = Redactor(enabled=redact)
         table = Table()
         table.add_column("IP", style="cyan")
         table.add_column("Name", style="green")
@@ -58,12 +73,12 @@ def register(app: typer.Typer) -> None:
 
         for device in devices:
             table.add_row(
-                device.ip,
+                redactor.redact_ip(device.ip),
                 device.name,
                 device.friendly_name,
-                device.mac_address,
+                redactor.redact_mac(device.mac_address),
                 device.model,
-                device.esphome_version,
+                redactor.redact_version(device.esphome_version),
             )
 
         console.print(table)
