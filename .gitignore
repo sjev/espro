@@ -1,3 +1,8 @@
+# dot files
+.*
+.*/
+!.gitignore
+
 # temp files
 temp/
 *_cache/
