@@ -86,6 +86,17 @@ This is a proof-of-concept. Feedback is welcome.
 - `invoke test` - Run tests with coverage
 - `invoke clean` - Remove untracked files (interactive)
 
+**Mock device for testing:**
+```bash
+# Terminal 1: Start a mock ESPHome device
+uv run espro mock --name test-device --port 6053
+
+# Terminal 2: Scan for it
+uv run espro scan 127.0.0.1/32
+```
+
+The mock implements the ESPHome Native API (plaintext) with a single switch entity—useful for development without real hardware.
+
 
 ## License
 

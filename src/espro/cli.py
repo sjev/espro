@@ -10,6 +10,7 @@ from rich.table import Table
 from espro import __version__
 from espro.database import Database
 from espro.logging import setup_logging
+from espro.mock_device import run_mock_device
 from espro.scanner import scan_network
 from espro.services import validate_mappings
 
@@ -250,6 +251,23 @@ def validate() -> None:
 
     if result.errors:
         raise typer.Exit(1)
+
+
+@app.command()
+def mock(
+    name: str = typer.Option("mock-switch-1", "--name", "-n", help="Device name"),
+    port: int = typer.Option(6053, "--port", "-p", help="Port to listen on"),
+    mac: str = typer.Option("AA:BB:CC:DD:EE:FF", "--mac", help="MAC address to report"),
+) -> None:
+    """Run a mock ESPHome device for development."""
+    console = Console()
+    console.print(f"Starting mock device '{name}' on port {port}...")
+    console.print("Press Ctrl+C to stop.\n")
+
+    try:
+        asyncio.run(run_mock_device(name=name, port=port, mac_address=mac))
+    except KeyboardInterrupt:
+        console.print("\n[green]Mock device stopped.[/green]")
 
 
 if __name__ == "__main__":
