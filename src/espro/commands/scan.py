@@ -48,18 +48,60 @@ async def check_device(ip: str, config: ScanningConfig) -> PhysicalDevice | None
 
 async def scan_network(network: str, config: ScanningConfig) -> list[PhysicalDevice]:
     net = ipaddress.ip_network(network, strict=False)
-    hosts = [str(host) for host in net.hosts()]
-    logger.debug("Scanning network %s (%d hosts)", network, len(hosts))
+    host_count: int
+    if isinstance(net, ipaddress.IPv4Network):
+        host_count = (
+            int(net.num_addresses - 2)
+            if net.prefixlen <= 30
+            else int(net.num_addresses)
+        )
+    else:
+        host_count = int(net.num_addresses)
 
-    semaphore = asyncio.Semaphore(config.parallel_scans)
+    if host_count <= 0:
+        logger.debug("Scanning network %s (no hosts)", network)
+        return []
 
-    async def _bounded_check(host: str) -> PhysicalDevice | None:
-        async with semaphore:
-            return await check_device(host, config)
+    worker_count = min(config.parallel_scans, host_count)
+    logger.debug(
+        "Scanning network %s (%d hosts, %d workers)", network, host_count, worker_count
+    )
 
-    tasks = [asyncio.create_task(_bounded_check(host)) for host in hosts]
-    results = await asyncio.gather(*tasks)
-    devices = [device for device in results if device is not None]
+    queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=worker_count * 4)
+    devices: list[PhysicalDevice] = []
+
+    async def _producer() -> None:
+        for host in net.hosts():
+            await queue.put(str(host))
+        for _ in range(worker_count):
+            await queue.put(None)
+
+    async def _worker() -> None:
+        while True:
+            host = await queue.get()
+            try:
+                if host is None:
+                    return
+                device = await check_device(host, config)
+                if device is not None:
+                    devices.append(device)
+            finally:
+                queue.task_done()
+
+    workers = [asyncio.create_task(_worker()) for _ in range(worker_count)]
+    workers_completed = False
+    try:
+        await _producer()
+        await queue.join()
+        await asyncio.gather(*workers)
+        workers_completed = True
+    finally:
+        if not workers_completed:
+            for worker in workers:
+                if not worker.done():
+                    worker.cancel()
+            await asyncio.gather(*workers, return_exceptions=True)
+
     logger.debug("Scan complete: found %d devices", len(devices))
     return devices
 

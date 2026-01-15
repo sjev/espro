@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 import typer
 from rich.console import Console
@@ -9,6 +10,8 @@ from rich.table import Table
 from espro.commands import scan_network
 
 from .common import build_database, load_settings_or_exit
+
+logger = logging.getLogger(__name__)
 
 
 def register(app: typer.Typer) -> None:
@@ -34,6 +37,11 @@ def register(app: typer.Typer) -> None:
             console.print(f"Using network from config: {network}")
 
         console.print(f"Scanning {network} for ESPHome devices...")
+        logger.info(
+            "Scan settings: timeout=%.2fs, parallel_scans=%d",
+            settings.scanning.timeout,
+            settings.scanning.parallel_scans,
+        )
         devices = asyncio.run(scan_network(network, settings.scanning))
 
         if not devices:
