@@ -1,27 +1,26 @@
 # ESPro
 
-*ESPro is a control plane for ESPHome fleets: register, program, and operate devices behind stable logical identities (with an optional MQTT bridge).*
+*A control plane for ESPHome fleets: manage devices behind stable logical identities.*
 
-
+> **Status:** Early prototype. Core registry and scanning work. Feedback welcome.
 
 ## The Problem
 
-ESPHome ties device identity to physical hardware. When a broken device gets replaced:
+ESPHome ties device identity to physical hardware. When a device fails and gets replaced:
 
-- All Home Assistant entity IDs change
+- Home Assistant entity IDs change
 - Dashboards break
 - Automations need manual updates
 - 30+ minutes of recovery work per device
 
-This tool aims to simplify device commissioning and management for professional installers and power users who want to treat home infrastructure as code.
+This is [one of the most common ESPHome + Home Assistant frustrations](docs/esphome_pain_points.md)—documented across forums, GitHub issues, and Reddit.
 
 ## The Solution
 
-**A control plane for ESPHome devices.**
+**Decouple logical identity from physical hardware.**
 
-ESPro maintains a device registry (logical ↔ physical), supports lifecycle workflows (replacement, commissioning, programming), and can optionally expose devices into an MQTT domain.
+ESPro maintains a device registry mapping logical names to physical devices. When hardware fails, update the mapping—everything else stays stable.
 
-Home Assistant connects to stable logical devices (`outdoor_light_1`), not physical hardware. When a device breaks, update a registry file and restart—entity IDs stay stable, automations keep working.
 ```toml
 # ~/.local/share/espro/devices.toml
 [logical_devices]
@@ -29,78 +28,122 @@ outdoor_light_1 = { physical = "esp-sonoff-1.local" }
 chicken_scale = { physical = "esp32-coop.local" }
 ```
 
-Device dies? Change the IP, reload ESPro mappings. Done.
+Device dies? Swap in new hardware, update the mapping, done.
 
 ## Architecture
+
 ```
-Home Assistant (stable entity IDs)
-(or other consumers via MQTT)
-    ↓
-ESPro (device registry + control plane)
-    ↓
-Physical ESPHome Devices (swappable)
+┌─────────────────────────────────┐
+│  Home Assistant / MQTT clients  │  ← stable entity IDs
+└───────────────┬─────────────────┘
+                │
+┌───────────────▼─────────────────┐
+│      ESPro (control plane)      │  ← logical ↔ physical registry
+└───────────────┬─────────────────┘
+                │
+┌───────────────▼─────────────────┐
+│   Physical ESPHome devices      │  ← swappable hardware
+└─────────────────────────────────┘
 ```
 
-Three layers with clear responsibilities:
+Three layers, clear responsibilities:
+- **ESPHome** — Firmware and I/O on physical hardware
+- **ESPro** — Device registry and lifecycle management
+- **Home Assistant** — Automations, dashboards, UI
 
-- **ESPHome** - Firmware and I/O
-- **ESPro** - Hardware abstraction and lifecycle management
-- **Home Assistant** - Automations and UI
+## What Works Today
+
+| Feature | Status |
+|---------|--------|
+| Network scanning (CIDR ranges) | ✅ Working |
+| Device registry (TOML-based) | ✅ Working |
+| Logical ↔ physical mapping | ✅ Working |
+| Mapping validation | ✅ Working |
+| Mock device for testing | ✅ Working |
+| MQTT bridge | 🔜 Planned |
+| HA integration | 🔜 Planned |
+
+## Demo Walkthrough
+
+```bash
+# 1. Initialize configuration
+uv run espro config init
+
+# 2. Scan your network for ESPHome devices
+uv run espro scan 192.168.1.0/24
+
+# 3. Register a logical device
+uv run espro add kitchen_sensor esp-kitchen.local
+
+# 4. List registered devices
+uv run espro list
+
+# 5. Validate mappings against last scan
+uv run espro validate
+```
+
+For testing without real hardware:
+```bash
+# Terminal 1: Start mock device
+uv run espro mock --name test-device
+
+# Terminal 2: Scan and register it
+uv run espro scan 127.0.0.1/32
+uv run espro add my_sensor test-device.local
+```
+
+## Roadmap
+
+**Phase 1: Registry (current)**
+- Device discovery and scanning
+- Logical ↔ physical mapping in TOML
+- Validation and drift detection
+
+**Phase 2: MQTT Bridge**
+- Expose logical devices to MQTT
+- Automatic re-routing on hardware changes
+- Entity ID stability for Home Assistant
+
+**Phase 3: Lifecycle Management**
+- Device commissioning workflows
+- Firmware deployment coordination
+- Fleet-wide operations
 
 ## Philosophy
 
-**Boring technology**: Docker, TOML, Git, REST—nothing exotic.
+**Plain text wins** — Configuration in Git-tracked TOML. No database. Audit trail via `git log`, rollback via `git revert`, backup via `git push`.
 
-**Plain text wins**: Configuration in Git-tracked TOML. No database, ever. Audit trail via `git log`, rollback via `git revert`, backup via `git push`.
+**Infrastructure as code** — Reproducible deployments. Version-controlled configuration. Offline-capable.
 
-**Infrastructure as code**: Reproducible deployments. Version-controlled configuration. Offline-capable.
+**Unix philosophy** — Do one thing well. Don't replace ESPHome, MQTT, or Home Assistant—complement them.
 
-**Unix philosophy**: Do one thing well—provide a device registry + lifecycle control plane. Don't replace ESPHome, MQTT, or Home Assistant.
-
-## Status
-
-**Early development.** Validating technical feasibility and gathering community feedback.
-
-Target audience: Professional installers managing 10-1000+ devices across single or multiple sites who need reproducible deployments and version stability.
-
-## Questions?
-
-This is a proof-of-concept. Feedback is welcome.
+**Boring technology** — TOML, JSON, asyncio. Nothing exotic.
 
 ---
 
-
 ## Development
 
-**Quick start:**
-1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
-2. Install dependencies: `uv sync --group dev`
-3. Initialize config: `uv run espro config init`
-4. Run CLI: `uv run espro --help`
-5. Run tests: `uv run pytest`
-
-**Available invoke tasks** (optional, install with `uv tool install invoke`):
-- `invoke lint` - Run ruff and mypy
-- `invoke test` - Run tests with coverage
-- `invoke format` - Format code with ruff
-- `invoke clean` - Remove untracked files (interactive)
-
-**Mock device for testing:**
 ```bash
-# Terminal 1: Start a mock ESPHome device
-uv run espro mock --name test-device --port 6053
+# Setup
+uv sync --group dev
 
-# Terminal 2: Scan for it
-uv run espro scan 127.0.0.1/32
+# Run CLI
+uv run espro --help
+
+# Run tests
+uv run pytest
+
+# Lint & format
+uv run invoke lint
+uv run invoke format
 ```
 
-The mock implements the ESPHome Native API (plaintext) with a single switch entity—useful for development without real hardware.
-
 **Config locations:**
-- Config file: `~/.config/espro/config.toml` (override with `ESPRO_CONFIG`)
-- Data directory: `~/.local/share/espro`
+- Config: `~/.config/espro/config.toml` (override with `ESPRO_CONFIG`)
+- Data: `~/.local/share/espro/`
 
+See [CLAUDE.md](CLAUDE.md) for architecture details and development notes.
 
 ## License
 
-MIT License - see LICENSE file for details.
+MIT
