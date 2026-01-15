@@ -1,11 +1,14 @@
 """CLI for espro."""
 
 import asyncio
+from datetime import datetime
 from pathlib import Path
 
+import aioesphomeapi
 import typer
 from rich.console import Console
 from rich.table import Table
+from rich.text import Text
 
 from espro import __version__
 from espro.database import Database
@@ -268,6 +271,114 @@ def mock(
         asyncio.run(run_mock_device(name=name, port=port, mac_address=mac))
     except KeyboardInterrupt:
         console.print("\n[green]Mock device stopped.[/green]")
+
+
+# Log level name to enum mapping
+LOG_LEVELS = {
+    "none": aioesphomeapi.LogLevel.LOG_LEVEL_NONE,
+    "error": aioesphomeapi.LogLevel.LOG_LEVEL_ERROR,
+    "warn": aioesphomeapi.LogLevel.LOG_LEVEL_WARN,
+    "info": aioesphomeapi.LogLevel.LOG_LEVEL_INFO,
+    "config": aioesphomeapi.LogLevel.LOG_LEVEL_CONFIG,
+    "debug": aioesphomeapi.LogLevel.LOG_LEVEL_DEBUG,
+    "verbose": aioesphomeapi.LogLevel.LOG_LEVEL_VERBOSE,
+    "very_verbose": aioesphomeapi.LogLevel.LOG_LEVEL_VERY_VERBOSE,
+}
+
+# Log level to Rich color style (keyed by int value)
+LOG_LEVEL_STYLES = {
+    1: "red",  # ERROR
+    2: "yellow",  # WARN
+    3: "green",  # INFO
+    4: "cyan",  # CONFIG
+    5: "blue",  # DEBUG
+    6: "dim",  # VERBOSE
+    7: "dim",  # VERY_VERBOSE
+}
+
+# Log level int to name
+LOG_LEVEL_NAMES = {
+    0: "NONE",
+    1: "ERROR",
+    2: "WARN",
+    3: "INFO",
+    4: "CONFIG",
+    5: "DEBUG",
+    6: "VERBOSE",
+    7: "VERY_VERBOSE",
+}
+
+
+async def _subscribe_logs(
+    host: str,
+    port: int,
+    level: aioesphomeapi.LogLevel,
+    dump_config: bool,
+    console: Console,
+) -> None:
+    """Connect to device and stream logs."""
+    client = aioesphomeapi.APIClient(host, port=port, password=None)
+    await client.connect(login=True)
+
+    info = await client.device_info()
+    console.print(f"Connected to [green]{info.name}[/green] ({host}:{port})\n")
+
+    stop_event = asyncio.Event()
+    parser = aioesphomeapi.LogParser(strip_ansi_escapes=False)
+
+    def _coerce_log_message(message: object) -> str:
+        if isinstance(message, (bytes, bytearray, memoryview)):
+            return bytes(message).decode("utf-8", errors="backslashreplace")
+        return str(message)
+
+    def on_log(msg: object) -> None:
+        text = _coerce_log_message(getattr(msg, "message", ""))
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        for line in text.splitlines():
+            formatted = parser.parse_line(line, timestamp)
+            if formatted:
+                console.print(Text.from_ansi(formatted), highlight=False, soft_wrap=True)
+
+    client.subscribe_logs(on_log, log_level=level, dump_config=dump_config)
+
+    try:
+        await stop_event.wait()
+    except asyncio.CancelledError:
+        pass
+    finally:
+        await client.disconnect()
+
+
+@app.command()
+def logs(
+    host: str = typer.Argument(..., help="Device hostname or IP address"),
+    port: int = typer.Option(6053, "--port", "-p", help="Port to connect to"),
+    level: str = typer.Option("debug", "--level", "-l", help="Log level filter"),
+    dump_config: bool = typer.Option(
+        True,
+        "--dump-config/--no-dump-config",
+        help="Request the device to dump its config when subscribing",
+    ),
+) -> None:
+    """Stream logs from an ESPHome device."""
+    console = Console()
+
+    log_level = LOG_LEVELS.get(level.lower())
+    if log_level is None:
+        console.print(f"[red]Invalid log level:[/red] {level}")
+        console.print(f"Valid levels: {', '.join(LOG_LEVELS.keys())}")
+        raise typer.Exit(1)
+
+    console.print(f"Connecting to {host}:{port}...")
+    console.print("Press Ctrl+C to stop.\n")
+
+    try:
+        asyncio.run(_subscribe_logs(host, port, log_level, dump_config, console))
+    except KeyboardInterrupt:
+        console.print("\n[green]Disconnected.[/green]")
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from None
 
 
 if __name__ == "__main__":

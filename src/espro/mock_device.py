@@ -30,7 +30,13 @@ MSG_LIST_ENTITIES_SWITCH_RESPONSE = 17
 MSG_LIST_ENTITIES_DONE_RESPONSE = 19
 MSG_SUBSCRIBE_STATES_REQUEST = 20
 MSG_SWITCH_STATE_RESPONSE = 26
+MSG_SUBSCRIBE_LOGS_REQUEST = 28
+MSG_SUBSCRIBE_LOGS_RESPONSE = 29
 MSG_SWITCH_COMMAND_REQUEST = 33
+
+# Log levels from api.proto
+LOG_LEVEL_INFO = 3
+LOG_LEVEL_DEBUG = 5
 
 
 def encode_varint(value: int) -> bytes:
@@ -108,6 +114,8 @@ class MockESPHomeDevice:
 
     _server: asyncio.Server | None = field(default=None, repr=False)
     _subscribers: set["StreamWriter"] = field(default_factory=set, repr=False)
+    _log_subscribers: set["StreamWriter"] = field(default_factory=set, repr=False)
+    _log_task: asyncio.Task[None] | None = field(default=None, repr=False)
 
     async def start(self) -> None:
         """Start the mock device server."""
@@ -154,6 +162,7 @@ class MockESPHomeDevice:
             logger.debug("Client disconnected: %s", addr)
         finally:
             self._subscribers.discard(writer)
+            self._log_subscribers.discard(writer)
             writer.close()
             await writer.wait_closed()
 
@@ -185,6 +194,9 @@ class MockESPHomeDevice:
 
         elif msg_type == MSG_SWITCH_COMMAND_REQUEST:
             await self._handle_switch_command(payload, writer)
+
+        elif msg_type == MSG_SUBSCRIBE_LOGS_REQUEST:
+            await self._handle_subscribe_logs(writer)
 
         elif msg_type == MSG_DISCONNECT_REQUEST:
             await self._send_disconnect_response(writer)
@@ -253,6 +265,13 @@ class MockESPHomeDevice:
             self.switch_state = cmd.state
             logger.info("Switch state changed to: %s", self.switch_state)
 
+            # Broadcast log message
+            state_str = "ON" if self.switch_state else "OFF"
+            await self._broadcast_log(
+                LOG_LEVEL_INFO,
+                f"[{self.name}] Switch '{self.switch_name}' turned {state_str}",
+            )
+
             # Broadcast to all subscribers
             for subscriber in list(self._subscribers):
                 try:
@@ -263,6 +282,44 @@ class MockESPHomeDevice:
     async def _send_disconnect_response(self, writer: "StreamWriter") -> None:
         """Send DisconnectResponse."""
         await self._send(MSG_DISCONNECT_RESPONSE, pb.DisconnectResponse(), writer)
+
+    async def _handle_subscribe_logs(self, writer: "StreamWriter") -> None:
+        """Handle log subscription request."""
+        self._log_subscribers.add(writer)
+        await self._send_log(
+            writer, LOG_LEVEL_INFO, f"[{self.name}] Log streaming started"
+        )
+
+        # Start periodic log emitter if not running
+        if self._log_task is None or self._log_task.done():
+            self._log_task = asyncio.create_task(self._emit_periodic_logs())
+
+    async def _send_log(self, writer: "StreamWriter", level: int, message: str) -> None:
+        """Send a log message to a subscriber."""
+        msg = pb.SubscribeLogsResponse()
+        msg.level = level
+        msg.message = message.encode("utf-8")
+        await self._send(MSG_SUBSCRIBE_LOGS_RESPONSE, msg, writer)
+
+    async def _broadcast_log(self, level: int, message: str) -> None:
+        """Broadcast a log message to all log subscribers."""
+        for subscriber in list(self._log_subscribers):
+            try:
+                await self._send_log(subscriber, level, message)
+            except (ConnectionResetError, BrokenPipeError):
+                self._log_subscribers.discard(subscriber)
+
+    async def _emit_periodic_logs(self) -> None:
+        """Emit periodic debug logs while there are subscribers."""
+        counter = 0
+        while self._log_subscribers:
+            await asyncio.sleep(3.0)
+            if self._log_subscribers:
+                counter += 1
+                await self._broadcast_log(
+                    LOG_LEVEL_DEBUG,
+                    f"[{self.name}] Heartbeat #{counter}, switch={'ON' if self.switch_state else 'OFF'}",
+                )
 
 
 async def run_mock_device(
