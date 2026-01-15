@@ -24,7 +24,7 @@ def register(app: typer.Typer) -> None:
                 "Uses config default if omitted."
             ),
         ),
-        save: bool = typer.Option(True, help="Save scan results to data directory"),
+        save: bool = typer.Option(False, help="Save scan results to data directory"),
         redact: bool = typer.Option(
             False,
             "--redact",
