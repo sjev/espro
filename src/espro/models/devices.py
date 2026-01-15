@@ -1,12 +1,12 @@
-"""Device and scan models for ESPro."""
+from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class PhysicalDevice(BaseModel):
-    """Physical ESPHome device (from scan)."""
+    model_config = {"extra": "forbid"}
 
     ip: str
     name: str
@@ -17,7 +17,7 @@ class PhysicalDevice(BaseModel):
 
 
 class ScanResult(BaseModel):
-    """Complete scan result."""
+    model_config = {"extra": "forbid"}
 
     scan_timestamp: datetime
     network: str
@@ -25,13 +25,13 @@ class ScanResult(BaseModel):
 
 
 class LogicalDevice(BaseModel):
-    """Logical device mapping."""
+    model_config = {"extra": "forbid"}
 
-    physical: str  # hostname or IP
+    physical: str
     notes: str | None = None
 
 
 class DeviceRegistry(BaseModel):
-    """Complete logical device registry."""
+    model_config = {"extra": "forbid"}
 
-    logical_devices: dict[str, LogicalDevice] = {}
+    logical_devices: dict[str, LogicalDevice] = Field(default_factory=dict)

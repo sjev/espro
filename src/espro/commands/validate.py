@@ -1,27 +1,11 @@
-"""Business logic services."""
+from __future__ import annotations
 
-from dataclasses import dataclass
-
-from espro.models import DeviceRegistry, ScanResult
-
-
-@dataclass
-class ValidationResult:
-    """Result of validating logical devices against scan."""
-
-    errors: list[str]
-    warnings: list[str]
-    valid_count: int
-    unmapped_devices: list[tuple[str, str]]  # (name, ip)
+from espro.models import DeviceRegistry, ScanResult, ValidationResult
 
 
 def validate_mappings(registry: DeviceRegistry, scan: ScanResult) -> ValidationResult:
-    """Validate logical device mappings against scan results.
-
-    Returns ValidationResult with errors, warnings, and unmapped devices.
-    """
-    physical_by_ip = {d.ip: d for d in scan.devices}
-    physical_by_name = {d.name: d for d in scan.devices}
+    physical_by_ip = {device.ip: device for device in scan.devices}
+    physical_by_name = {device.name: device for device in scan.devices}
 
     errors: list[str] = []
     warnings: list[str] = []
@@ -31,7 +15,6 @@ def validate_mappings(registry: DeviceRegistry, scan: ScanResult) -> ValidationR
     for logical_name, logical_device in registry.logical_devices.items():
         physical_ref = logical_device.physical
 
-        # Check if it's an IP or hostname
         found = None
         matched_name = None
 
@@ -42,7 +25,6 @@ def validate_mappings(registry: DeviceRegistry, scan: ScanResult) -> ValidationR
             found = physical_by_name[physical_ref]
             matched_name = physical_ref
         elif physical_ref.replace(".local", "") in physical_by_name:
-            # Try without .local suffix
             matched_name = physical_ref.replace(".local", "")
             found = physical_by_name[matched_name]
 
@@ -56,8 +38,11 @@ def validate_mappings(registry: DeviceRegistry, scan: ScanResult) -> ValidationR
                 "which was not found in scan"
             )
 
-    # Find unmapped physical devices
-    unmapped = [(d.name, d.ip) for d in scan.devices if d.name not in matched_names]
+    unmapped = [
+        (device.name, device.ip)
+        for device in scan.devices
+        if device.name not in matched_names
+    ]
 
     return ValidationResult(
         errors=errors,

@@ -10,14 +10,13 @@ requires-python = ">=3.12"
 dependencies = [
     "aioesphomeapi>=29.0.0",
     "coloredlogs>=15.0",
-    "platformdirs>=4.0.0",
     "pydantic>=2.0.0",
-    "pyyaml>=6.0",
+    "rich>=13.0",
     "typer>=0.15.0",
 ]
 
 [project.scripts]
-espro = "espro.cli:app"
+espro = "espro.cli.app:app"
 
 [build-system]
 requires = ["uv_build>=0.8.8,<0.9.0"]
@@ -25,25 +24,12 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
-    "bump-my-version>=1.2.1",
     "invoke>=2.2.0",
     "mypy>=1.17.1",
     "pytest>=8.4.1",
     "pytest-cov>=6.1.0",
     "ruff>=0.12.8",
-    "types-pyyaml>=6.0",
 ]
-
-[tool.bumpversion]
-current_version = "0.1.0"
-commit = true
-tag = true
-tag_name = "v{new_version}"
-
-[[tool.bumpversion.files]]
-filename = "pyproject.toml"
-search = "version = \"{current_version}\""
-replace = "version = \"{new_version}\""
 
 #------------------ruff configuration----------------
 [tool.ruff.lint]
@@ -65,4 +51,4 @@ python_files = ["test_*.py"]
 norecursedirs = ["temp", ".git", ".venv", "dist", "build"]
 
 [tool.coverage.run]
-omit = ["src/espro/cli.py"]
+omit = ["src/espro/cli/*"]

@@ -21,15 +21,12 @@ This tool aims to simplify device commissioning and management for professional 
 
 ESPro maintains a device registry (logical ↔ physical), supports lifecycle workflows (replacement, commissioning, programming), and can optionally expose devices into an MQTT domain.
 
-Home Assistant connects to stable logical devices (`outdoor_light_1`), not physical hardware. When a device breaks, update a config file and restart—entity IDs stay stable, automations keep working.
-```yaml
-# config/devices.yaml
-logical_devices:
-  outdoor_light_1:
-    physical: esp-sonoff-1.local
-
-  chicken_scale:
-    physical: esp32-coop.local
+Home Assistant connects to stable logical devices (`outdoor_light_1`), not physical hardware. When a device breaks, update a registry file and restart—entity IDs stay stable, automations keep working.
+```toml
+# ~/.local/share/espro/devices.toml
+[logical_devices]
+outdoor_light_1 = { physical = "esp-sonoff-1.local" }
+chicken_scale = { physical = "esp32-coop.local" }
 ```
 
 Device dies? Change the IP, reload ESPro mappings. Done.
@@ -52,9 +49,9 @@ Three layers with clear responsibilities:
 
 ## Philosophy
 
-**Boring technology**: Docker, YAML, Git, REST—nothing exotic.
+**Boring technology**: Docker, TOML, Git, REST—nothing exotic.
 
-**Plain text wins**: Configuration in Git-tracked YAML. No database, ever. Audit trail via `git log`, rollback via `git revert`, backup via `git push`.
+**Plain text wins**: Configuration in Git-tracked TOML. No database, ever. Audit trail via `git log`, rollback via `git revert`, backup via `git push`.
 
 **Infrastructure as code**: Reproducible deployments. Version-controlled configuration. Offline-capable.
 
@@ -77,13 +74,15 @@ This is a proof-of-concept. Feedback is welcome.
 
 **Quick start:**
 1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
-2. Install dependencies: `uv sync`
-3. Run CLI: `uv run espro --help`
-4. Run tests: `uv run pytest`
+2. Install dependencies: `uv sync --group dev`
+3. Initialize config: `uv run espro config init`
+4. Run CLI: `uv run espro --help`
+5. Run tests: `uv run pytest`
 
 **Available invoke tasks** (optional, install with `uv tool install invoke`):
 - `invoke lint` - Run ruff and mypy
 - `invoke test` - Run tests with coverage
+- `invoke format` - Format code with ruff
 - `invoke clean` - Remove untracked files (interactive)
 
 **Mock device for testing:**
@@ -96,6 +95,10 @@ uv run espro scan 127.0.0.1/32
 ```
 
 The mock implements the ESPHome Native API (plaintext) with a single switch entity—useful for development without real hardware.
+
+**Config locations:**
+- Config file: `~/.config/espro/config.toml` (override with `ESPRO_CONFIG`)
+- Data directory: `~/.local/share/espro`
 
 
 ## License

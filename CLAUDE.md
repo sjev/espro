@@ -10,12 +10,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Setup
 ```bash
-uv sync
+uv sync --group dev
 ```
 
 ### Code Quality
-- **Linting and formatting**: `uv run ruff check --fix` and `uv run ruff format`
-- **Type checking**: `uv run mypy .`
+- **Linting and formatting**: `uv run ruff check` and `uv run ruff format`
+- **Type checking**: `uv run mypy src`
 - **Combined linting**: `uv run invoke lint`
 
 ### Testing
@@ -23,61 +23,50 @@ uv sync
 - **Run specific test**: `uv run pytest -k test_name`
 - **Run with coverage**: `uv run invoke test`
 
-### Build & Release
-- **Build package**: `uv run invoke build-package`
-- **Release to PyPI**: `uv run invoke release` (requires PYPI_TOKEN env var)
-
 ### Maintenance
 - **Clean untracked files**: `uv run invoke clean` (interactive)
-- **Version bumping**: `uv run bump-my-version bump [patch|minor|major]`
 
 ## Project Structure
 
 ```
 src/espro/
-├── __init__.py              # Package version (dynamic)
-├── cli.py                   # Typer-based CLI with Rich output
-├── database.py              # Main database facade
-├── models.py                # Pydantic models (config + devices)
-├── services.py              # Business logic (validation, etc.)
-├── storage.py               # ConfigLoader + PhysicalDeviceStorage
-├── scanner.py               # ESPHome device discovery
-├── logging.py               # Logging configuration
+├── __init__.py              # Public API exports + version
+├── cli/                     # Typer CLI entrypoint and commands
+├── commands/                # Core command implementations
+├── config/                  # Settings + XDG path resolution
+├── models/                  # Pydantic data models
+├── storage/                 # File-based persistence
+├── utils/                   # Logging helpers
 └── py.typed                 # Type hints marker
 
 tests/
-├── test_espro.py            # CLI tests
-├── test_database.py         # Database tests
-└── test_services.py         # Business logic tests
+├── conftest.py              # Shared fixtures
+├── test_public.py           # Public API tests
+└── test_internals.py        # Internal module tests
 ```
 
 ## Architecture
 
-### Device Discovery (scanner.py)
+### Device Discovery (commands/scan.py)
 - Uses `aioesphomeapi` to communicate with ESPHome devices on port 6053
 - `scan_network()`: Async concurrent scanning of CIDR ranges
 - `detect_local_network()`: Auto-detects local /24 subnet
 - Returns `PhysicalDevice` pydantic model
 
-### Data Models (models.py)
-- `EsProConfig` / `ScanningConfig`: Configuration settings
-- `PhysicalDevice`: Discovered ESPHome device info
-- `LogicalDevice` / `DeviceRegistry`: Logical-to-physical mappings
+### Config (config/)
+- TOML config at `~/.config/espro/config.toml` (override with `ESPRO_CONFIG`)
+- Settings are frozen Pydantic models
 
-### Storage (storage.py)
-- `ConfigLoader`: Handles YAML config and device registry files
-- `PhysicalDeviceStorage`: Manages scan result JSON files
-- Database path: `ESPRO_DB` env var or `~/.local/share/espro`
+### Storage (storage/database.py)
+- Stores logical registry in `devices.toml`
+- Stores scan result JSON in `physical/current.json`
+- Data directory defaults to `~/.local/share/espro`
 
-### Database (database.py)
-- Facade providing unified API over ConfigLoader + PhysicalDeviceStorage
-- Main entry point for CLI commands
+### CLI Structure (cli/app.py)
+- Built with Typer and Rich for formatted output
+- Commands: init, scan, list, add, remove, info, validate, logs, mock
 
-### CLI Structure (cli.py)
-- Built with Typer, Rich for formatted output
-- Commands: init, scan, list, add, remove, info, validate
-
-### Logging (logging.py)
+### Logging (utils/logging.py)
 - Uses `coloredlogs` for colored terminal output
 - Log level controlled by `LOGLEVEL` environment variable (default: INFO)
 - Suppresses noisy `aioesphomeapi` logs by default
