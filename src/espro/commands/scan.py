@@ -31,7 +31,7 @@ async def check_device(ip: str, config: ScanningConfig) -> PhysicalDevice | None
             model=info.model,
             esphome_version=info.esphome_version,
         )
-        logger.info("Found device '%s' at %s", device.name, ip)
+        logger.debug("Found device '%s' at %s", device.name, ip)
         return device
     except (asyncio.TimeoutError, TimeoutError):
         logger.debug("No response from %s (timeout)", ip)
