@@ -17,7 +17,10 @@ async def check_device(ip: str, config: ScanningConfig) -> PhysicalDevice | None
     logger.debug("Checking %s", ip)
     try:
         api = aioesphomeapi.APIClient(ip, port=config.port, password="")
-        await asyncio.wait_for(api.connect(login=True), timeout=config.timeout)
+        await asyncio.wait_for(
+            api.connect(login=True, log_errors=False),
+            timeout=config.timeout,
+        )
         info = await api.device_info()
         await api.disconnect()
         device = PhysicalDevice(
