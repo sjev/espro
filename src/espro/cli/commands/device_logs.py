@@ -8,16 +8,21 @@ import typer
 from rich.console import Console
 from rich.text import Text
 
-LOG_LEVELS = {
-    "none": aioesphomeapi.LogLevel.LOG_LEVEL_NONE,
-    "error": aioesphomeapi.LogLevel.LOG_LEVEL_ERROR,
-    "warn": aioesphomeapi.LogLevel.LOG_LEVEL_WARN,
-    "info": aioesphomeapi.LogLevel.LOG_LEVEL_INFO,
-    "config": aioesphomeapi.LogLevel.LOG_LEVEL_CONFIG,
-    "debug": aioesphomeapi.LogLevel.LOG_LEVEL_DEBUG,
-    "verbose": aioesphomeapi.LogLevel.LOG_LEVEL_VERBOSE,
-    "very_verbose": aioesphomeapi.LogLevel.LOG_LEVEL_VERY_VERBOSE,
-}
+
+def _parse_log_level(value: str) -> aioesphomeapi.LogLevel:
+    normalized = value.strip().upper()
+    if not normalized:
+        raise KeyError(value)
+    if not normalized.startswith("LOG_LEVEL_"):
+        normalized = f"LOG_LEVEL_{normalized}"
+    return aioesphomeapi.LogLevel[normalized]
+
+
+def _log_level_names() -> list[str]:
+    return [
+        level.name.removeprefix("LOG_LEVEL_").lower()
+        for level in sorted(aioesphomeapi.LogLevel, key=lambda item: item.value)
+    ]
 
 
 async def _subscribe_logs(
@@ -76,10 +81,11 @@ def register(app: typer.Typer) -> None:
         """Stream logs from an ESPHome device."""
         console = Console()
 
-        log_level = LOG_LEVELS.get(level.lower())
-        if log_level is None:
+        try:
+            log_level = _parse_log_level(level)
+        except KeyError:
             console.print(f"[red]Invalid log level:[/red] {level}")
-            console.print(f"Valid levels: {', '.join(LOG_LEVELS.keys())}")
+            console.print(f"Valid levels: {', '.join(_log_level_names())}")
             raise typer.Exit(1)
 
         console.print(f"Connecting to {host}:{port}...")
