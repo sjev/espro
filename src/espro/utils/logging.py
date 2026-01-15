@@ -8,7 +8,7 @@ import coloredlogs  # type: ignore[import]
 
 LogLevel = Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]
 
-DEFAULT_FORMAT = "%(asctime)s %(name)s %(levelname)s %(message)s"
+DEFAULT_FORMAT = "%(asctime)s [%(name)s] %(filename)s:%(lineno)d - %(message)s"
 DEFAULT_DATE_FORMAT = "%H:%M:%S"
 
 
