@@ -27,14 +27,9 @@ def register(app: typer.Typer) -> None:
         ),
         save: bool = typer.Option(True, help="Save scan results to data directory"),
         redact: bool = typer.Option(
-            True,
-            "--redact/--no-redact",
-            help="Redact sensitive values in output (default: on)",
-        ),
-        raw: bool = typer.Option(
             False,
-            "--raw",
-            help="Disable redaction (alias for --no-redact)",
+            "--redact",
+            help="Redact sensitive values in output",
         ),
     ) -> None:
         """Scan network for ESPHome devices."""
@@ -59,23 +54,32 @@ def register(app: typer.Typer) -> None:
             console.print("No ESPHome devices found.")
             return
 
-        if raw:
-            redact = False
+        # Build reverse lookup: physical name -> logical name
+        registry = db.load_devices()
+        physical_to_logical = {
+            ld.physical: name for name, ld in registry.logical_devices.items()
+        }
 
         redactor = Redactor(enabled=redact)
         table = Table()
         table.add_column("IP", style="cyan")
-        table.add_column("Name", style="green")
-        table.add_column("Friendly Name")
+        table.add_column("Physical", style="green")
+        table.add_column("Logical", style="yellow")
         table.add_column("MAC Address")
         table.add_column("Model")
         table.add_column("Version")
 
         for device in devices:
+            # Format: "name (Friendly Name)" or just "name"
+            if device.friendly_name:
+                physical_col = f"{device.name} ({device.friendly_name})"
+            else:
+                physical_col = device.name
+            logical_col = physical_to_logical.get(device.name, "")
             table.add_row(
                 redactor.redact_ip(device.ip),
-                device.name,
-                device.friendly_name,
+                physical_col,
+                logical_col,
                 redactor.redact_mac(device.mac_address),
                 device.model,
                 redactor.redact_version(device.esphome_version),
