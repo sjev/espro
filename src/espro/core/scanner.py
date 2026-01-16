@@ -4,13 +4,131 @@ import asyncio
 import ipaddress
 import logging
 import socket
+import string
+import threading
 
 import aioesphomeapi
+from zeroconf import ServiceBrowser, ServiceInfo, ServiceListener, Zeroconf
 
 from espro.config import ScanningConfig
 from espro.models import PhysicalDevice
 
 logger = logging.getLogger(__name__)
+
+MDNS_SERVICE_TYPE = "_esphomelib._tcp.local."
+
+
+def _decode_txt_properties(properties: dict[bytes, bytes | None]) -> dict[str, str]:
+    decoded: dict[str, str] = {}
+    for key, value in properties.items():
+        key_text = key.decode("utf-8", errors="replace")
+        if value is None:
+            value_text = ""
+        elif isinstance(value, bytes):
+            value_text = value.decode("utf-8", errors="replace")
+        else:
+            value_text = str(value)
+        decoded[key_text] = value_text
+    return decoded
+
+
+def _normalize_mac(value: str) -> str:
+    if not value:
+        return ""
+    cleaned = value.replace(":", "").replace("-", "").replace(".", "")
+    if len(cleaned) == 12 and all(ch in string.hexdigits for ch in cleaned):
+        pairs = [cleaned[i : i + 2] for i in range(0, 12, 2)]
+        return ":".join(pair.upper() for pair in pairs)
+    return value
+
+
+def _pick_ip(info: ServiceInfo) -> str | None:
+    addresses = info.parsed_addresses()
+    if not addresses:
+        return None
+    for address in addresses:
+        if ":" not in address:
+            return address
+    return addresses[0]
+
+
+def _strip_service_suffix(name: str) -> str:
+    suffix = f".{MDNS_SERVICE_TYPE}"
+    if name.endswith(suffix):
+        return name[: -len(suffix)]
+    return name.rstrip(".")
+
+
+def _strip_local_suffix(hostname: str) -> str:
+    cleaned = hostname.rstrip(".")
+    if cleaned.endswith(".local"):
+        return cleaned[: -len(".local")]
+    return cleaned
+
+
+def _device_from_service_info(
+    info: ServiceInfo, service_name: str
+) -> PhysicalDevice | None:
+    ip = _pick_ip(info)
+    if ip is None:
+        return None
+
+    properties = _decode_txt_properties(info.properties)
+    name = _strip_service_suffix(service_name)
+    if not name and info.server:
+        name = _strip_local_suffix(info.server)
+
+    friendly_name = properties.get("friendly_name", "")
+    mac_address = _normalize_mac(
+        properties.get("mac", "") or properties.get("mac_address", "")
+    )
+    model = (
+        properties.get("model")
+        or properties.get("platform")
+        or properties.get("board")
+        or ""
+    )
+    version = properties.get("version") or properties.get("esphome_version") or ""
+
+    return PhysicalDevice(
+        ip=ip,
+        name=name or ip,
+        friendly_name=friendly_name,
+        mac_address=mac_address,
+        model=model,
+        esphome_version=version,
+        port=info.port,
+        txt=properties,
+    )
+
+
+class ESPHomeListener(ServiceListener):
+    def __init__(self, info_timeout: float) -> None:
+        self._info_timeout_ms = max(int(info_timeout * 1000), 1)
+        self._lock = threading.Lock()
+        self._found: dict[str, PhysicalDevice] = {}
+
+    def add_service(self, zc: Zeroconf, type_: str, name: str) -> None:
+        info = zc.get_service_info(type_, name, timeout=self._info_timeout_ms)
+        if not info:
+            return
+        device = _device_from_service_info(info, name)
+        if device is None:
+            return
+        with self._lock:
+            self._found[name] = device
+        logger.debug("Discovered device '%s' at %s via mDNS", device.name, device.ip)
+
+    def update_service(self, zc: Zeroconf, type_: str, name: str) -> None:
+        self.add_service(zc, type_, name)
+
+    def remove_service(self, _zc: Zeroconf, _type_: str, name: str) -> None:
+        with self._lock:
+            self._found.pop(name, None)
+
+    def devices(self) -> list[PhysicalDevice]:
+        with self._lock:
+            return list(self._found.values())
 
 
 async def check_device(ip: str, config: ScanningConfig) -> PhysicalDevice | None:
@@ -47,62 +165,22 @@ async def check_device(ip: str, config: ScanningConfig) -> PhysicalDevice | None
 
 
 async def scan_network(network: str, config: ScanningConfig) -> list[PhysicalDevice]:
-    net = ipaddress.ip_network(network, strict=False)
-    host_count: int
-    if isinstance(net, ipaddress.IPv4Network):
-        host_count = (
-            int(net.num_addresses - 2)
-            if net.prefixlen <= 30
-            else int(net.num_addresses)
-        )
-    else:
-        host_count = int(net.num_addresses)
-
-    if host_count <= 0:
-        logger.debug("Scanning network %s (no hosts)", network)
-        return []
-
-    worker_count = min(config.parallel_scans, host_count)
     logger.debug(
-        "Scanning network %s (%d hosts, %d workers)", network, host_count, worker_count
+        "Discovering ESPHome devices via mDNS (timeout=%.2fs, label=%s)",
+        config.timeout,
+        network,
     )
-
-    queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=worker_count * 4)
-    devices: list[PhysicalDevice] = []
-
-    async def _producer() -> None:
-        for host in net.hosts():
-            await queue.put(str(host))
-        for _ in range(worker_count):
-            await queue.put(None)
-
-    async def _worker() -> None:
-        while True:
-            host = await queue.get()
-            try:
-                if host is None:
-                    return
-                device = await check_device(host, config)
-                if device is not None:
-                    devices.append(device)
-            finally:
-                queue.task_done()
-
-    workers = [asyncio.create_task(_worker()) for _ in range(worker_count)]
-    workers_completed = False
+    zeroconf = Zeroconf()
+    listener = ESPHomeListener(config.timeout)
+    ServiceBrowser(zeroconf, MDNS_SERVICE_TYPE, listener)
     try:
-        await _producer()
-        await queue.join()
-        await asyncio.gather(*workers)
-        workers_completed = True
+        await asyncio.sleep(config.timeout)
     finally:
-        if not workers_completed:
-            for worker in workers:
-                if not worker.done():
-                    worker.cancel()
-            await asyncio.gather(*workers, return_exceptions=True)
+        await asyncio.to_thread(zeroconf.close)
 
-    logger.debug("Scan complete: found %d devices", len(devices))
+    devices = listener.devices()
+    devices.sort(key=lambda device: (device.name, device.ip))
+    logger.debug("mDNS scan complete: found %d devices", len(devices))
     return devices
 
 

@@ -14,6 +14,8 @@ class PhysicalDevice(BaseModel):
     mac_address: str
     model: str
     esphome_version: str
+    port: int | None = None
+    txt: dict[str, str] = Field(default_factory=dict)
 
 
 class ScanResult(BaseModel):

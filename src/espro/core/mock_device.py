@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import socket
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, cast
 
 import aioesphomeapi.api_pb2  # type: ignore[import-untyped]
+from zeroconf import ServiceInfo
+from zeroconf.asyncio import AsyncZeroconf
 
 pb: Any = cast(Any, aioesphomeapi.api_pb2)
 
@@ -34,6 +37,16 @@ MSG_SWITCH_COMMAND_REQUEST = 33
 
 LOG_LEVEL_INFO = 3
 LOG_LEVEL_DEBUG = 5
+MDNS_SERVICE_TYPE = "_esphomelib._tcp.local."
+
+
+def _resolve_mdns_address() -> str:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 80))
+            return sock.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
 
 
 def encode_varint(value: int) -> bytes:
@@ -107,18 +120,62 @@ class MockESPHomeDevice:
     _subscribers: set["StreamWriter"] = field(default_factory=set, repr=False)
     _log_subscribers: set["StreamWriter"] = field(default_factory=set, repr=False)
     _log_task: asyncio.Task[None] | None = field(default=None, repr=False)
+    _zeroconf: AsyncZeroconf | None = field(default=None, repr=False)
+    _service_info: ServiceInfo | None = field(default=None, repr=False)
 
     async def start(self) -> None:
         self._server = await asyncio.start_server(
             self._handle_client, "0.0.0.0", self.port
         )
         logger.info("Mock device '%s' listening on port %d", self.name, self.port)
+        await self._register_mdns()
 
     async def stop(self) -> None:
+        await self._unregister_mdns()
         if self._server:
             self._server.close()
             await self._server.wait_closed()
             logger.info("Mock device '%s' stopped", self.name)
+
+    async def _register_mdns(self) -> None:
+        if self._zeroconf is not None:
+            return
+        address = _resolve_mdns_address()
+        properties = {
+            b"version": self.esphome_version.encode("utf-8"),
+            b"mac": self.mac_address.encode("utf-8"),
+            b"platform": self.model.encode("utf-8"),
+            b"friendly_name": self.friendly_name.encode("utf-8"),
+        }
+        service_name = f"{self.name}.{MDNS_SERVICE_TYPE}"
+        service_info = ServiceInfo(
+            type_=MDNS_SERVICE_TYPE,
+            name=service_name,
+            addresses=[socket.inet_aton(address)],
+            port=self.port,
+            properties=properties,
+            server=f"{self.name}.local.",
+        )
+        zeroconf = AsyncZeroconf()
+        await zeroconf.async_register_service(service_info)
+        self._zeroconf = zeroconf
+        self._service_info = service_info
+        logger.info(
+            "Mock device '%s' advertised via mDNS at %s:%d",
+            self.name,
+            address,
+            self.port,
+        )
+
+    async def _unregister_mdns(self) -> None:
+        if self._zeroconf is None or self._service_info is None:
+            return
+        zeroconf = self._zeroconf
+        service_info = self._service_info
+        self._zeroconf = None
+        self._service_info = None
+        await zeroconf.async_unregister_service(service_info)
+        await zeroconf.async_close()
 
     async def run_forever(self) -> None:
         await self.start()

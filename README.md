@@ -55,7 +55,7 @@ Three layers, clear responsibilities:
 
 | Feature | Status |
 |---------|--------|
-| Network scanning (CIDR ranges) | ✅ Working |
+| mDNS discovery (zeroconf) | ✅ Working |
 | Device registry (TOML-based) | ✅ Working |
 | Logical ↔ physical mapping | ✅ Working |
 | Mapping validation | ✅ Working |
@@ -69,8 +69,8 @@ Three layers, clear responsibilities:
 # 1. Initialize configuration
 uv run espro config init
 
-# 2. Scan your network for ESPHome devices
-uv run espro scan 192.168.1.0/24
+# 2. Discover ESPHome devices via mDNS
+uv run espro scan
 
 # 3. Register a logical device
 uv run espro add kitchen_sensor esp-kitchen.local
@@ -87,8 +87,8 @@ For testing without real hardware:
 # Terminal 1: Start mock device
 uv run espro mock --name test-device
 
-# Terminal 2: Scan and register it
-uv run espro scan 127.0.0.1/32
+# Terminal 2: Discover and register it
+uv run espro scan
 uv run espro add my_sensor test-device.local
 ```
 
@@ -102,7 +102,6 @@ uv run espro add my_sensor test-device.local
 TODO:
 
 - switch from ip to mac-based mapping.
-- change scan from brute approach to mdns.
 
 **Phase 2: MQTT Bridge**
 - Expose logical devices to MQTT

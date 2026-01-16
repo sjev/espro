@@ -12,13 +12,14 @@ Primary sources (cloned in this repo under `/.vendor/`):
 
 Implement a mock TCP server (usually on port `6053`) that supports:
 - Connecting from `aioesphomeapi.APIClient(...).connect(login=True)`
-- `device_info()` returning realistic metadata (enough for ESPro’s `src/espro/scanner.py`)
+- `device_info()` returning realistic metadata (used when ESPro verifies device info)
 - A single **switch entity** via `list_entities_services()`
 - Commands and state updates:
   - receive `switch_command`
   - broadcast `switch` state via `subscribe_states`
 - Keepalive (`ping`/`pong`)
 - Graceful disconnect
+- Advertise `_esphomelib._tcp.local.` via mDNS for discovery
 
 No Noise encryption support is required for the *simplest* mock; use plaintext.
 
@@ -104,9 +105,9 @@ Important details:
 
 The client periodically sends `PingRequest` (type `7`). If you don’t answer with `PingResponse` (type `8`), the client will eventually close the connection (see keepalive timers in `/.vendor/aioesphomeapi/aioesphomeapi/connection.py`).
 
-## Device info (what ESPro currently needs)
+## Device info (what ESPro uses today)
 
-ESPro scanning (`src/espro/scanner.py`) calls `device_info()` and reads these fields:
+ESPro API verification (`src/espro/scanner.py`) calls `device_info()` and reads these fields:
 - `name`
 - `friendly_name`
 - `mac_address`
@@ -204,4 +205,3 @@ Server must:
   - `SubscribeStatesRequest` → start sending `SwitchStateResponse`
   - `SwitchCommandRequest` → update state + emit `SwitchStateResponse`
   - `DisconnectRequest` → `DisconnectResponse` + close
-

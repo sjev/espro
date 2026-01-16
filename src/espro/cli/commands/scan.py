@@ -18,7 +18,8 @@ def scan(
     network: str | None = typer.Argument(
         None,
         help=(
-            "Network to scan (e.g., 192.168.1.0/24). Uses config default if omitted."
+            "Optional scan label (ignored for mDNS discovery). Uses config default if "
+            "omitted."
         ),
     ),
     save: bool = typer.Option(False, help="Save scan results to data directory"),
@@ -28,7 +29,7 @@ def scan(
         help="Redact sensitive values in output",
     ),
 ) -> None:
-    """Scan network for ESPHome devices."""
+    """Discover ESPHome devices via mDNS."""
     console = Console()
 
     settings = load_settings_or_exit()
@@ -36,13 +37,19 @@ def scan(
 
     if network is None:
         network = settings.scanning.default_network
-        console.print(f"Using network from config: {network}")
+        console.print(
+            f"Using scan label from config (ignored for discovery): {network}"
+        )
+    else:
+        console.print(
+            "Note: network argument is stored as a scan label; discovery uses mDNS."
+        )
 
-    console.print(f"Scanning {network} for ESPHome devices...")
+    console.print("Discovering ESPHome devices via mDNS...")
     logger.info(
-        "Scan settings: timeout=%.2fs, parallel_scans=%d",
+        "mDNS discovery settings: timeout=%.2fs, label=%s",
         settings.scanning.timeout,
-        settings.scanning.parallel_scans,
+        network,
     )
     devices = asyncio.run(scan_network(network, settings.scanning))
 

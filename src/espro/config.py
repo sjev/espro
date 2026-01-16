@@ -47,7 +47,7 @@ class DatabaseConfig(BaseModel):
 class ScanningConfig(BaseModel):
     model_config = {"frozen": True, "extra": "forbid"}
 
-    default_network: str = "192.168.1.0/24"
+    default_network: str = "mdns"
     port: int = Field(default=6053, ge=1, le=65535)
     timeout: float = Field(default=2.0, gt=0)
     parallel_scans: int = Field(default=255, ge=1, le=255)

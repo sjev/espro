@@ -27,9 +27,9 @@ def info() -> None:
     console.print(f"Config file: {config_path if config_exists else 'defaults'}")
 
     console.print("\n[bold]Configuration[/bold]")
-    console.print(f"Default network: {settings.scanning.default_network}")
-    console.print(f"Port: {settings.scanning.port}")
-    console.print(f"Timeout: {settings.scanning.timeout}s")
+    console.print(f"Scan label: {settings.scanning.default_network}")
+    console.print(f"mDNS timeout: {settings.scanning.timeout}s")
+    console.print(f"API port: {settings.scanning.port}")
 
     console.print("\n[bold]Statistics[/bold]")
     console.print(f"Logical devices: {len(registry.logical_devices)}")
