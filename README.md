@@ -4,6 +4,19 @@
 
 > **Status:** Early prototype. Core registry and scanning work. Feedback and co-developers welcome.
 
+## Who this is for (and who it is not)
+
+ESPro is for ESPHome / Home Assistant users who:
+- Run more than a handful of devices
+- Care about long-term maintainability and stability
+- Think in terms of infrastructure as code (versioned config, reproducibility)
+
+It is not for:
+- Plug-and-play smart home users
+- People who prefer GUIs over CLI tools
+
+
+
 ## The Problem
 
 In ESPHome and Home Assistant, device identity is tied to hardware identifiers (for example MAC address or mDNS name). When hardware fails and is replaced, Home Assistant discovers a *new* device and creates new entities. Automations, dashboards, and entity references usually need to be fixed by hand.
@@ -67,7 +80,7 @@ ESPro follows the same pattern as `zigbee2mqtt`: bridge a device protocol to MQT
    Native API          devices
 ```
 
-Home Assistant talks MQTT only. ESPHome devices are accessed via the native API behind ESPro. Entity IDs remain stable even when hardware is replaced.
+Home Assistant talks to ESPro (currently MQTT, later integration). ESPHome devices are accessed via the native API behind ESPro. Entity IDs remain stable even when hardware is replaced.
 
 > *The daemon is not yet implemented. Currently ESPro provides CLI tools for registry management.*
 
@@ -151,6 +164,21 @@ invoke format
 * Data: `~/.local/share/espro/`
 
 Issues, ideas, and PRs welcome.
+
+
+## Contributing
+
+You can contribute by engaing in discussions on.
+
+* system archtecture
+* scalability and reliability
+* how to solve "updates & features vs LTS stability" for home automation
+* how to open open-source home automation ecosystem to professional installers
+
+AND/OR
+
+* co-development of a production-grade automation system based on open-source blocks.
+
 
 ## License
 
