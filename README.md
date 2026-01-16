@@ -46,25 +46,40 @@ The ESPHome mDNS name is used as the physical identifier because:
 
 ## Architecture
 
+ESPro follows the same pattern as zigbee2mqtt: bridge a device protocol to MQTT with stable, logical identities. MQTT becomes the universal bus where multiple control planes publish physical devices under logical names.
+
 ```
-┌─────────────────────────────────┐
-│  Home Assistant / MQTT clients  │  ← stable logical identities
-└───────────────┬─────────────────┘
-                │
-┌───────────────▼─────────────────┐
-│        ESPro (control plane)    │  ← logical ↔ physical mapping
-└───────────────┬─────────────────┘
-                │
-┌───────────────▼─────────────────┐
-│    Physical ESPHome devices     │  ← replaceable hardware
-└─────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│                   MQTT Bus (logical identities)                   │
+└───────┬─────────────────┬─────────────────┬─────────────────┬─────┘
+        │                 │                 │                 │
+    ┌───▼───┐       ┌─────▼─────┐     ┌─────▼─────┐     ┌─────▼─────┐
+    │ ESPro │       │zigbee2mqtt│     │   Home    │     │   your    │
+    │daemon │       │           │     │ Assistant │     │   tools   │
+    └───┬───┘       └─────┬─────┘     └───────────┘     └───────────┘
+        │                 │
+    ESPHome            Zigbee
+   Native API          devices
 ```
+
+This decouples automation logic from device protocols. Home Assistant, custom scripts, and other tools all consume the same logical MQTT topics—regardless of whether the underlying device is ESPHome, Zigbee, or something else.
 
 ## Responsibilities
 
 * **ESPHome** — Firmware, I/O, and hardware interaction
-* **ESPro** — Device registry, identity mapping, and lifecycle management
-* **Home Assistant** — Automations, dashboards, and user interface
+* **ESPro** — Device registry, identity mapping, MQTT bridge
+* **Home Assistant** — Automations, dashboards, and user interface (consumes MQTT)
+
+## Philosophy
+
+**Plain text wins** — Configuration in Git-tracked TOML. No database. Audit trail via `git log`, rollback via `git revert`, backup via `git push`.
+
+**Infrastructure as code** — Reproducible deployments. Version-controlled configuration. Offline-capable.
+
+**Unix philosophy** — Do one thing well. Don't replace ESPHome, MQTT, or Home Assistant—complement them.
+
+**Boring technology** — TOML, JSON, asyncio. Nothing exotic.
+
 
 ## Demo Walkthrough
 
@@ -101,33 +116,20 @@ espro add my_sensor test-device
 
 ## Roadmap
 
-**Phase 1: Registry (current)**
-- [x] mDNS discovery (zeroconf)
-- [x] Device discovery and scanning
-- [x] Device registry (TOML-based)
-- [ ] Logical ↔ physical mapping in TOML. TODO: add MAC
+**Phase 1: Registry** ✓
+- [x] mDNS device discovery
+- [x] Logical ↔ physical registry (TOML)
 - [x] Mapping validation and drift detection
 - [x] Mock device for testing
 
-**Phase 2: MQTT Bridge**
-- [ ] Expose logical devices to MQTT (MQTT bridge)
-- [ ] Entity ID stability for Home Assistant
-- [ ] Home Assistant integration
+**Phase 2: MQTT Daemon**
+- [ ] Daemon connecting to physical devices via `aioesphomeapi`
+- [ ] Publish device state to MQTT under logical topic names
+- [ ] Subscribe to MQTT commands, forward to physical devices
+- [ ] Reconnection handling for device disconnects
+- [ ] Docker container packaging
 
-**Phase 3: Lifecycle Management**
-- [ ] Device commissioning workflows
-- [ ] Firmware deployment coordination
-- [ ] Fleet-wide operations
 
-## Philosophy
-
-**Plain text wins** — Configuration in Git-tracked TOML. No database. Audit trail via `git log`, rollback via `git revert`, backup via `git push`.
-
-**Infrastructure as code** — Reproducible deployments. Version-controlled configuration. Offline-capable.
-
-**Unix philosophy** — Do one thing well. Don't replace ESPHome, MQTT, or Home Assistant—complement them.
-
-**Boring technology** — TOML, JSON, asyncio. Nothing exotic.
 
 ---
 
