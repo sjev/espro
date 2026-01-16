@@ -66,18 +66,6 @@ The ESPHome mDNS name is used as the physical identifier because:
 * **ESPro** — Device registry, identity mapping, and lifecycle management
 * **Home Assistant** — Automations, dashboards, and user interface
 
-## What Works Today
-
-| Feature | Status |
-|---------|--------|
-| mDNS discovery (zeroconf) | ✅ Working |
-| Device registry (TOML-based) | ✅ Working |
-| Logical ↔ physical mapping | ✅ Working |
-| Mapping validation | ✅ Working |
-| Mock device for testing | ✅ Working |
-| MQTT bridge | 🔜 Planned |
-| HA integration | 🔜 Planned |
-
 ## Demo Walkthrough
 
 ```bash
@@ -114,19 +102,22 @@ espro add my_sensor test-device
 ## Roadmap
 
 **Phase 1: Registry (current)**
-- Device discovery and scanning
-- Logical ↔ physical mapping in TOML
-- Validation and drift detection
+- [x] mDNS discovery (zeroconf)
+- [x] Device discovery and scanning
+- [x] Device registry (TOML-based)
+- [ ] Logical ↔ physical mapping in TOML. TODO: add MAC
+- [x] Mapping validation and drift detection
+- [x] Mock device for testing
 
 **Phase 2: MQTT Bridge**
-- Expose logical devices to MQTT
-- Automatic re-routing on hardware changes
-- Entity ID stability for Home Assistant
+- [ ] Expose logical devices to MQTT (MQTT bridge)
+- [ ] Entity ID stability for Home Assistant
+- [ ] Home Assistant integration
 
 **Phase 3: Lifecycle Management**
-- Device commissioning workflows
-- Firmware deployment coordination
-- Fleet-wide operations
+- [ ] Device commissioning workflows
+- [ ] Firmware deployment coordination
+- [ ] Fleet-wide operations
 
 ## Philosophy
 
