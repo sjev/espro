@@ -6,50 +6,65 @@
 
 ## The Problem
 
-ESPHome ties device identity to physical hardware. When a device fails and gets replaced:
+In ESPHome and Home Assistant, device identity is tied to hardware identifiers (e.g. MAC address). When hardware is replaced, Home Assistant discovers a new device and creates new entities, which typically requires manual updates to automations, dashboards, and entity references. There is no native workflow to replace hardware while preserving a logical role.
 
-- Home Assistant entity IDs change
-- Dashboards break
-- Automations need manual updates
-- 30+ minutes of recovery work per device
+This affects both common ESPHome patterns:
 
-This is [one of the most common ESPHome + Home Assistant frustrations](docs/esphome_pain_points.md)—documented across forums, GitHub issues, and Reddit.
+**Per-device configuration (“pets”)**
+Each device has its own YAML file. Replacing hardware results in a new device and new entities, requiring manual reassignment. At scale, this leads to many nearly identical YAML files.
 
-## The Solution
+**Shared configuration (“cattle”)**
+A single YAML is reused with `name_add_mac_suffix: true`, reducing duplication. However, the final device name is only known after boot, and there is no built-in way to associate a specific device with a predefined logical role (e.g. *kitchen light*).
 
-**Decouple logical identity from physical hardware.**
+In both cases, there is no abstraction between physical device identity and logical function, making hardware replacement and long-term maintenance unnecessarily manual.
 
-ESPro maintains a device registry mapping logical names to physical devices. When hardware fails, update the mapping—everything else stays stable.
 
-```toml
-# ~/.local/share/espro/devices.toml
-[logical_devices]
-outdoor_light_1 = { physical = "esp-sonoff-1.local" }
-chicken_scale = { physical = "esp32-coop.local" }
-```
+## Core Idea
 
-Device dies? Swap in new hardware, update the mapping, done.
+**Two-layer identity model:**
+
+| Layer        | Example          | Stability                           | Defined by                    |
+| ------------ | ---------------- | ----------------------------------- | ----------------------------- |
+| **Logical**  | `kitchen_switch` | Stable across hardware replacements | User (ESPro registry)         |
+| **Physical** | `switch-aabbcc`  | Tied to hardware                    | ESPHome mDNS name (MAC-based) |
+
+ESPro maintains the mapping between these layers. When hardware fails:
+
+1. Flash a replacement board with the same firmware
+2. Discover the new device on the network (`switch-ddeeff`)
+3. Update a single mapping: `kitchen_switch` → `switch-ddeeff`
+4. Downstream systems continue to see the same logical device
+
+## Physical Identifier Choice
+
+The ESPHome mDNS name is used as the physical identifier because:
+
+* With `name_add_mac_suffix`, it is hardware-bound
+* It is human-readable and routable on the local network
+* It is already used by `aioesphomeapi` for device communication
+* No custom firmware changes are required
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────┐
-│  Home Assistant / MQTT clients  │  ← stable entity IDs
+│  Home Assistant / MQTT clients  │  ← stable logical identities
 └───────────────┬─────────────────┘
                 │
 ┌───────────────▼─────────────────┐
-│      ESPro (control plane)      │  ← logical ↔ physical registry
+│        ESPro (control plane)    │  ← logical ↔ physical mapping
 └───────────────┬─────────────────┘
                 │
 ┌───────────────▼─────────────────┐
-│   Physical ESPHome devices      │  ← swappable hardware
+│    Physical ESPHome devices     │  ← replaceable hardware
 └─────────────────────────────────┘
 ```
 
-Three layers, clear responsibilities:
-- **ESPHome** — Firmware and I/O on physical hardware
-- **ESPro** — Device registry and lifecycle management
-- **Home Assistant** — Automations, dashboards, UI
+## Responsibilities
+
+* **ESPHome** — Firmware, I/O, and hardware interaction
+* **ESPro** — Device registry, identity mapping, and lifecycle management
+* **Home Assistant** — Automations, dashboards, and user interface
 
 ## What Works Today
 
@@ -66,30 +81,34 @@ Three layers, clear responsibilities:
 ## Demo Walkthrough
 
 ```bash
-# 1. Initialize configuration
-uv run espro config init
+# Setup
+uv sync
+source .venv/bin/activate
 
-# 2. Discover ESPHome devices via mDNS
-uv run espro scan
+# Initialize configuration
+espro config init
 
-# 3. Register a logical device
-uv run espro add kitchen_sensor esp-kitchen.local
+# Discover ESPHome devices via mDNS
+espro scan
 
-# 4. List registered devices
-uv run espro list
+# Register a logical device
+espro add kitchen_switch switch-aabbcc
 
-# 5. Validate mappings against last scan
-uv run espro validate
+# List registered devices
+espro list
+
+# Validate mappings against last scan
+espro validate
 ```
 
 For testing without real hardware:
 ```bash
 # Terminal 1: Start mock device
-uv run espro mock --name test-device
+espro mock --name test-device
 
 # Terminal 2: Discover and register it
-uv run espro scan
-uv run espro add my_sensor test-device.local
+espro scan
+espro add my_sensor test-device
 ```
 
 ## Roadmap
@@ -98,10 +117,6 @@ uv run espro add my_sensor test-device.local
 - Device discovery and scanning
 - Logical ↔ physical mapping in TOML
 - Validation and drift detection
-
-TODO:
-
-- switch from ip to mac-based mapping.
 
 **Phase 2: MQTT Bridge**
 - Expose logical devices to MQTT
@@ -128,18 +143,13 @@ TODO:
 ## Development
 
 ```bash
-# Setup
 uv sync --group dev
+source .venv/bin/activate
 
-# Run CLI
-uv run espro --help
-
-# Run tests
-uv run pytest
-
-# Lint & format
-uv run invoke lint
-uv run invoke format
+espro --help
+pytest
+invoke lint
+invoke format
 ```
 
 **Config locations:**
