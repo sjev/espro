@@ -1,52 +1,57 @@
 # ESPro
 
-*A control plane for ESPHome fleets: manage devices behind stable logical identities.*
+*An infrastructure layer for ESPHome fleets that separates logical device identity from physical hardware.*
 
-> **Status:** Early prototype. Core registry and scanning work. Feedback welcome.
+> **Status:** Early prototype. Core registry and scanning work. Feedback and co-developers welcome.
 
 ## The Problem
 
-In ESPHome and Home Assistant, device identity is tied to hardware identifiers (e.g. MAC address). When hardware is replaced, Home Assistant discovers a new device and creates new entities, which typically requires manual updates to automations, dashboards, and entity references. There is no native workflow to replace hardware while preserving a logical role.
+In ESPHome and Home Assistant, device identity is tied to hardware identifiers (for example MAC address or mDNS name). When hardware fails and is replaced, Home Assistant discovers a *new* device and creates new entities. Automations, dashboards, and entity references usually need to be fixed by hand.
 
-This affects both common ESPHome patterns:
+There is no native workflow to replace hardware while keeping the same logical role.
 
-**Per-device configuration (“pets”)**
-Each device has its own YAML file. Replacing hardware results in a new device and new entities, requiring manual reassignment. At scale, this leads to many nearly identical YAML files.
+This affects both common ESPHome usage patterns:
 
-**Shared configuration (“cattle”)**
-A single YAML is reused with `name_add_mac_suffix: true`, reducing duplication. However, the final device name is only known after boot, and there is no built-in way to associate a specific device with a predefined logical role (e.g. *kitchen light*).
+**Per-device configuration ("pets")**
+Each device has its own YAML file. Replacing hardware creates a new device with new entities. At scale this leads to YAML duplication and manual repair work.
 
-In both cases, there is no abstraction between physical device identity and logical function, making hardware replacement and long-term maintenance unnecessarily manual.
+**Shared configuration ("cattle")**
+A single YAML is reused with `name_add_mac_suffix: true`. This reduces duplication, but the final device name is only known after boot, and there is no built-in way to bind a specific device to a predefined role such as *kitchen light*.
 
+In both cases, there is no abstraction between *what a device does* and *which piece of hardware currently does it*.
 
 ## Core Idea
 
-**Two-layer identity model:**
+**Two-layer identity model**
 
-| Layer        | Example          | Stability                           | Defined by                    |
-| ------------ | ---------------- | ----------------------------------- | ----------------------------- |
-| **Logical**  | `kitchen_switch` | Stable across hardware replacements | User (ESPro registry)         |
-| **Physical** | `switch-aabbcc`  | Tied to hardware                    | ESPHome mDNS name (MAC-based) |
+| Layer        | Example          | Stability                           |
+| ------------ | ---------------- | ----------------------------------- |
+| **Logical**  | `kitchen_switch` | Stable across hardware replacements |
+| **Physical** | `switch-aabbcc`  | Tied to a specific ESP board        |
 
-ESPro maintains the mapping between these layers. When hardware fails:
+ESPro keeps the mapping between these layers.
 
-1. Flash a replacement board with the same firmware
-2. Discover the new device on the network (`switch-ddeeff`)
-3. Update a single mapping: `kitchen_switch` → `switch-ddeeff`
-4. Downstream systems continue to see the same logical device
+When hardware fails:
 
-## Physical Identifier Choice
+1. Flash a replacement board with the same ESPHome firmware
+2. Discover the new device on the network
+3. Update one mapping: `kitchen_switch → switch-ddeeff`
+4. Everything downstream keeps working
+
+Home Assistant and automations only ever reference the logical name.
+
+## Physical Identifier
 
 The ESPHome mDNS name is used as the physical identifier because:
 
 * With `name_add_mac_suffix`, it is hardware-bound
 * It is human-readable and routable on the local network
-* It is already used by `aioesphomeapi` for device communication
+* It is already used by `aioesphomeapi`
 * No custom firmware changes are required
 
 ## Architecture
 
-ESPro follows the same pattern as zigbee2mqtt: bridge a device protocol to MQTT with stable, logical identities. MQTT becomes the universal bus where multiple control planes publish physical devices under logical names.
+ESPro follows the same pattern as `zigbee2mqtt`: bridge a device protocol to MQTT using stable logical identities.
 
 ```
 ┌───────────────────────────────────────────────────────────────────┐
@@ -62,26 +67,24 @@ ESPro follows the same pattern as zigbee2mqtt: bridge a device protocol to MQTT 
    Native API          devices
 ```
 
-This decouples automation logic from device protocols. Home Assistant, custom scripts, and other tools all consume the same logical MQTT topics—regardless of whether the underlying device is ESPHome, Zigbee, or something else.
+Home Assistant talks MQTT only. ESPHome devices are accessed via the native API behind ESPro. Entity IDs remain stable even when hardware is replaced.
+
+> *The daemon is not yet implemented. Currently ESPro provides CLI tools for registry management.*
 
 ## Responsibilities
 
-* **ESPHome** — Firmware, I/O, and hardware interaction
-* **ESPro** — Device registry, identity mapping, MQTT bridge
-* **Home Assistant** — Automations, dashboards, and user interface (consumes MQTT)
+* **ESPHome** — Firmware and hardware interaction
+* **ESPro** — Registry, identity mapping, MQTT bridge
+* **Home Assistant** — Automations and UI (via MQTT)
 
 ## Philosophy
 
-**Plain text wins** — Configuration in Git-tracked TOML. No database. Audit trail via `git log`, rollback via `git revert`, backup via `git push`.
+* **Plain text config** — Git-tracked TOML. No database.
+* **Infrastructure as code** — Reproducible and offline-capable.
+* **Unix mindset** — Do one thing well. Don't replace ESPHome or Home Assistant.
+* **Boring tech** — TOML, JSON, asyncio.
 
-**Infrastructure as code** — Reproducible deployments. Version-controlled configuration. Offline-capable.
-
-**Unix philosophy** — Do one thing well. Don't replace ESPHome, MQTT, or Home Assistant—complement them.
-
-**Boring technology** — TOML, JSON, asyncio. Nothing exotic.
-
-
-## Demo Walkthrough
+## Demo
 
 ```bash
 # Setup
@@ -91,47 +94,44 @@ source .venv/bin/activate
 # Initialize configuration
 espro config init
 
-# Discover ESPHome devices via mDNS
+# Discover ESPHome devices
 espro scan
 
 # Register a logical device
 espro add kitchen_switch switch-aabbcc
 
-# List registered devices
+# List registry
 espro list
 
-# Validate mappings against last scan
+# Validate mappings
 espro validate
 ```
 
-For testing without real hardware:
+Testing without hardware (useful for development and CI):
+
 ```bash
-# Terminal 1: Start mock device
+# Terminal 1
 espro mock --name test-device
 
-# Terminal 2: Discover and register it
+# Terminal 2
 espro scan
 espro add my_sensor test-device
 ```
 
 ## Roadmap
 
-**Phase 1: Registry** ✓
-- [x] mDNS device discovery
+**Registry** ✓
+- [x] mDNS discovery
 - [x] Logical ↔ physical registry (TOML)
 - [x] Mapping validation and drift detection
-- [x] Mock device for testing
+- [x] Mock devices for testing
 
-**Phase 2: MQTT Daemon**
-- [ ] Daemon connecting to physical devices via `aioesphomeapi`
-- [ ] Publish device state to MQTT under logical topic names
-- [ ] Subscribe to MQTT commands, forward to physical devices
-- [ ] Reconnection handling for device disconnects
-- [ ] Docker container packaging
-
-
-
----
+**MQTT daemon** (next)
+- [ ] Connect to physical devices via `aioesphomeapi`
+- [ ] Publish state under logical topic names
+- [ ] Forward MQTT commands to physical devices
+- [ ] Reconnection handling
+- [ ] Docker packaging
 
 ## Development
 
@@ -145,11 +145,12 @@ invoke lint
 invoke format
 ```
 
-**Config locations:**
-- Config: `~/.config/espro/config.toml` (override with `ESPRO_CONFIG`)
-- Data: `~/.local/share/espro/`
+**Config paths**
 
-See [CLAUDE.md](CLAUDE.md) for architecture details and development notes.
+* Config: `~/.config/espro/config.toml` (`ESPRO_CONFIG` override)
+* Data: `~/.local/share/espro/`
+
+Issues, ideas, and PRs welcome.
 
 ## License
 
