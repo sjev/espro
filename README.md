@@ -19,14 +19,14 @@ It is not for:
 
 ## The Problem
 
-In ESPHome and Home Assistant, device identity is tied to hardware identifiers (for example MAC address or mDNS name). When hardware fails and is replaced, Home Assistant discovers a *new* device and creates new entities. Automations, dashboards, and entity references usually need to be fixed by hand.
+In ESPHome and Home Assistant, device identity is tied to hardware identifiers (for example, a MAC address or an mDNS name). When hardware fails and is replaced, Home Assistant discovers a *new* device and creates new entities. Automations, dashboards, and entity references usually need to be fixed by hand.
 
 There is no native workflow to replace hardware while keeping the same logical role.
 
 This affects both common ESPHome usage patterns:
 
 **Per-device configuration ("pets")**
-Each device has its own YAML file. Replacing hardware creates a new device with new entities. At scale this leads to YAML duplication and manual repair work.
+Each device has its own YAML file. Replacing hardware creates a new device with new entities. At scale, this leads to YAML duplication and manual repair work.
 
 **Shared configuration ("cattle")**
 A single YAML is reused with `name_add_mac_suffix: true`. This reduces duplication, but the final device name is only known after boot, and there is no built-in way to bind a specific device to a predefined role such as *kitchen light*.
@@ -80,7 +80,7 @@ ESPro follows the same pattern as `zigbee2mqtt`: bridge a device protocol to MQT
    Native API          devices
 ```
 
-Home Assistant talks to ESPro (currently MQTT, later integration). ESPHome devices are accessed via the native API behind ESPro. Entity IDs remain stable even when hardware is replaced.
+Home Assistant talks to ESPro (currently via MQTT, later via an integration). ESPHome devices are accessed via the native API behind ESPro. Entity IDs remain stable even when hardware is replaced.
 
 > *The daemon is not yet implemented. Currently ESPro provides CLI tools for registry management.*
 
@@ -168,12 +168,12 @@ Issues, ideas, and PRs welcome.
 
 ## Contributing
 
-You can contribute by engaing in discussions on.
+You can contribute by engaging in discussions on:
 
-* system archtecture
+* system architecture
 * scalability and reliability
 * how to solve "updates & features vs LTS stability" for home automation
-* how to open open-source home automation ecosystem to professional installers
+* how to open the open-source home automation ecosystem to professional installers
 
 AND/OR
 
