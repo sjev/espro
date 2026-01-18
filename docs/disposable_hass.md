@@ -1,67 +1,73 @@
-# Home Assistant as disposable frontend: conditionally feasible - claude
+# Home Assistant as Disposable Frontend
 
-Using Home Assistant purely as a **rebuildable UI client** is **partially feasible**, but requires strict architectural constraints. The core challenge: HA's internal registries store the mapping between external identifiers and user-visible entity_ids. Without careful design, a fresh HA instance creates different entity_ids, breaking dashboards and automations.
+A reference for using Home Assistant purely as a **rebuildable UI client** for an external control plane.
 
-**The solution exists** through MQTT discovery's `default_entity_id` field combined with YAML-only configuration. When HA's `.storage` is deleted and discovery messages are replayed, entities can be recreated with **identical entity_ids**—if the external control plane specifies them explicitly. However, certain user customizations (areas, friendly names changed in UI, icons) will not survive rebuild unless the external system also controls these via discovery payloads.
+## Core Principle
 
----
+> Home Assistant is a **stateless UI cache**.
+> MQTT + external control plane are the **only source of truth**.
 
-## The registry problem and why it matters
-
-Home Assistant maintains three critical registries in `.storage/` that create state dependencies:
-
-| Registry | Contents | Deletable? |
-|----------|----------|------------|
-| `core.entity_registry` | entity_id ↔ unique_id mapping, user customizations, disabled/hidden states | **No** — causes entity_id instability |
-| `core.device_registry` | Device metadata, user-assigned names, area assignments | **Partial** — hardware info regenerates, customizations lost |
-| `core.area_registry` | User-defined rooms/zones | **No** — 100% user-created data |
-| `core.restore_state` | Last known entity states (15-min cache) | **Yes** — pure cache, regenerates automatically |
-
-When `core.entity_registry` is deleted and MQTT discovery messages replay, HA recreates entities as if new. Without explicit control, entity_ids are generated from device names and entity names—which may produce `_2`, `_3` suffixes if naming collisions occur. The critical insight: **MQTT discovery's `default_entity_id` field bypasses this problem** by explicitly specifying the exact entity_id on first creation.
+HA can be wiped entirely and rebuilt **without user-visible change** if and only if HA holds **zero authoritative state**. This is achievable with strict architectural constraints.
 
 ---
 
-## MQTT discovery controls entity identity—with caveats
+## The Registry Problem
 
-The `default_entity_id` field (which replaces the deprecated `object_id` field removed in HA 2026.4) provides explicit control over entity_id generation:
+Home Assistant maintains registries in `.storage/` that create state dependencies:
 
-```json
-{
-  "name": "Living Room Temperature",
-  "default_entity_id": "sensor.living_room_temperature",
-  "unique_id": "ctrl_plane_sensor_001",
-  "state_topic": "home/living_room/temperature",
-  "device": {
-    "identifiers": ["living_room_hub"],
-    "name": "Living Room Hub",
-    "suggested_area": "Living Room"
-  }
-}
-```
+| Registry | Contents | Rebuildable? |
+|----------|----------|--------------|
+| `core.entity_registry` | entity_id ↔ unique_id mapping, customizations | Yes, via MQTT discovery |
+| `core.device_registry` | Device metadata, area assignments | Yes, via MQTT discovery |
+| `core.area_registry` | User-defined rooms/zones | Partial, via `suggested_area` |
+| `core.restore_state` | Last known entity states | Yes, pure cache |
+| `core.config_entries` | Integration configurations | Bypass with YAML config |
 
-**What external discovery CAN control:**
-- Initial `entity_id` via `default_entity_id` (works on fresh registry)
-- Device name, manufacturer, model via `device` block
-- Suggested area via `suggested_area` (HA may use this on first creation)
-- Whether entity is enabled by default (`enabled_by_default: false`)
-
-**What external discovery CANNOT override:**
-- Entity Registry customizations (if a user renamed entity_id in HA UI, registry wins)
-- Area assignments made manually in HA
-- Icons or friendly names changed via HA UI
-
-The `unique_id` field is **essential**—entities without it are not restored at startup and cannot be customized via HA's UI. The topic path's `<object_id>` portion (e.g., `homeassistant/sensor/my_object_id/config`) does **not** affect entity_id; it only organizes MQTT topics.
+When `.storage/` is deleted and MQTT discovery messages replay, HA recreates entities. Without explicit control, entity_ids may get `_2`, `_3` suffixes on collision. The solution: **MQTT discovery's `default_entity_id` field** specifies exact entity_ids on creation.
 
 ---
 
-## Required configuration for disposable operation
+## Non-Negotiable Constraints
 
-### Disable all hardware discovery
+### 1. MQTT-Only Integration
 
-Remove `default_config:` and explicitly exclude discovery integrations:
+- No native HA device integrations (Zigbee, Z-Wave, BLE, USB)
+- External control plane owns: device pairing, identity, state, availability
+- All entities enter HA exclusively through MQTT discovery
+
+### 2. Discovery Requirements
+
+Every MQTT discovery payload **must** include:
+
+| Field | Purpose |
+|-------|---------|
+| `unique_id` | Stable identifier managed by control plane; prevents duplicates |
+| `default_entity_id` | Exact entity_id to use (include domain prefix) |
+| `device.identifiers` | Stable device grouping |
+| `suggested_area` | Auto-assigns room on first creation |
+
+All discovery messages **must** use the MQTT retain flag.
+
+### 3. Identity Rules
+
+- `unique_id` = canonical identity (MAC, serial, or logical ID from control plane)
+- `entity_id` = reproducible via `default_entity_id`
+- **Never** rename entities in HA UI
+- **Never** reference HA-generated `device_id` anywhere
+
+### 4. YAML-Only Configuration
+
+- Dashboards: `lovelace: mode: yaml`
+- Automations: Labeled YAML blocks with `initial_state: true`
+- **Never** use UI-created dashboards, automations, or helpers
+
+---
+
+## Configuration Reference
+
+### configuration.yaml
 
 ```yaml
-# configuration.yaml — discovery disabled
 homeassistant:
   name: Home
   unit_system: metric
@@ -72,11 +78,13 @@ frontend:
 http:
 api:
 websocket_api:
-config:
 
 # MQTT as sole entity source
 mqtt:
   broker: mosquitto.local
+  port: 1883
+  username: ha
+  password: !secret mqtt_password
   discovery: true
   discovery_prefix: homeassistant
 
@@ -88,12 +96,12 @@ lovelace:
       mode: yaml
       filename: dashboards/main.yaml
 
-# YAML automations (labeled blocks, not UI-managed)
+# YAML automations with labeled blocks
 automation main: !include automations/main.yaml
 script: !include scripts.yaml
 scene: !include scenes.yaml
 
-# Explicitly NOT included:
+# EXPLICITLY EXCLUDED (do not add):
 # default_config:
 # dhcp:
 # ssdp:
@@ -105,11 +113,7 @@ scene: !include scenes.yaml
 # logbook:
 ```
 
-This configuration ensures HA only receives entities from MQTT discovery—no network scanning, no USB device detection, no mDNS discovery.
-
-### YAML dashboards reference logical entity_ids
-
-Dashboards in YAML mode are fully external—no `.storage/lovelace*` dependency:
+### Dashboard Example
 
 ```yaml
 # dashboards/main.yaml
@@ -118,16 +122,14 @@ views:
     cards:
       - type: entities
         entities:
-          - entity: sensor.living_room_temperature  # Logical ID from discovery
+          - entity: sensor.living_room_temperature
           - entity: light.kitchen_main
           - entity: binary_sensor.front_door
 ```
 
-When using `lovelace: mode: yaml`, the dashboard is defined entirely by your YAML file. Deleting `.storage/lovelace*` has no effect on YAML-mode dashboards.
+Reference **entities only**. Never reference devices.
 
-### Automations use labeled YAML blocks
-
-UI-created automations store state in `.storage/`. YAML-defined automations with labeled blocks avoid this dependency:
+### Automation Example
 
 ```yaml
 # automations/main.yaml
@@ -145,31 +147,15 @@ UI-created automations store state in `.storage/`. YAML-defined automations with
         entity_id: light.kitchen_main
 ```
 
-The `initial_state: true` ensures automations are enabled on fresh startup rather than restoring from (nonexistent) previous state.
+Use **entity-based triggers only**. Never use device triggers.
 
 ---
 
-## Rebuild workflow with external MQTT broker
+## MQTT Discovery Specification
 
-### Startup sequence
-
-**Order matters:** MQTT broker must be running before HA starts.
-
-1. **Start MQTT broker** (Mosquitto)
-2. **External control plane publishes retained discovery messages** to `homeassistant/+/+/config` topics
-3. **Start Home Assistant container**
-4. HA connects to broker, subscribes to `homeassistant/#`
-5. Broker replays all retained discovery messages
-6. HA creates entities using `default_entity_id` from payloads
-7. HA publishes birth message to `homeassistant/status` with payload `online`
-
-**Critical timing issue:** A documented race condition (GitHub #39007) means HA may take **10-15 seconds after the birth message** to actually be ready to receive state updates. External systems should add a delay after seeing `online` before publishing state updates.
-
-### MQTT discovery payload structure for full control
+### Payload Structure
 
 ```json
-// Topic: homeassistant/sensor/ctrl_bedroom_temp/config
-// Retain: true
 {
   "name": "Bedroom Temperature",
   "default_entity_id": "sensor.bedroom_temperature",
@@ -192,13 +178,45 @@ The `initial_state: true` ensures automations are enabled on fresh startup rathe
 }
 ```
 
-**Key fields for disposability:**
-- `default_entity_id`: Exact entity_id to use (include domain prefix)
-- `unique_id`: Stable identifier the control plane manages; must be globally unique
-- `suggested_area`: HA will assign this area on first entity creation
-- Retain flag: **Must be set** so messages replay on fresh HA start
+**Topic:** `homeassistant/sensor/ctrl_bedroom_temp/config`
+**Retain:** `true`
 
-### Docker deployment
+### What Discovery Controls
+
+| Attribute | Controllable | Notes |
+|-----------|--------------|-------|
+| Initial `entity_id` | Yes | Via `default_entity_id` |
+| Device grouping | Yes | Via `device.identifiers` |
+| Suggested area | Yes | Applied on first creation only |
+| Enabled by default | Yes | Via `enabled_by_default` |
+| UI customizations | No | Friendly names, icons changed in UI are lost |
+| Manual area changes | No | Only `suggested_area` survives rebuild |
+
+### Removing Entities
+
+Publish empty retained message to clear:
+
+```bash
+mosquitto_pub -t "homeassistant/sensor/old_device/config" -n -r
+```
+
+---
+
+## Rebuild Workflow
+
+### Startup Sequence
+
+1. **MQTT broker starts** (must be running before HA)
+2. **Control plane publishes** retained discovery messages to `homeassistant/+/+/config`
+3. **HA container starts**
+4. HA connects to broker, subscribes to `homeassistant/#`
+5. Broker replays retained discovery messages
+6. HA creates entities using `default_entity_id` from payloads
+7. HA publishes birth message: `homeassistant/status` = `online`
+8. **Wait 10-15 seconds** (documented race condition)
+9. Control plane publishes state updates
+
+### Docker Compose
 
 ```yaml
 services:
@@ -214,333 +232,117 @@ services:
   homeassistant:
     image: ghcr.io/home-assistant/home-assistant:stable
     volumes:
-      - ./ha-config:/config  # Contains only YAML files
+      - ./ha-config:/config  # YAML files only
     network_mode: host
     depends_on:
       - mosquitto
     restart: unless-stopped
 ```
 
-For truly disposable operation, the `/config` volume contains only:
-- `configuration.yaml` and included YAML files
-- `secrets.yaml` for MQTT credentials
-- Dashboard YAML files
+### Persistent vs Ephemeral
 
-The `.storage/` directory can be ephemeral if you accept the constraints below.
+**Persistent (version-controlled):**
+- `configuration.yaml`
+- `secrets.yaml`
+- `dashboards/*.yaml`
+- `automations/*.yaml`
 
----
-
-## Known failure modes and edge cases
-
-### Entity_id collision on rebuild
-
-If two discovery messages produce the same `default_entity_id`, the second entity gets a `_2` suffix. **Prevention:** External control plane must ensure unique `default_entity_id` values across all discovery payloads.
-
-### Ghost entities from stale retained messages
-
-If a device is removed but its retained discovery message persists on the broker, HA recreates the entity on every restart. **Solution:** Control plane must publish empty payload to the config topic to clear retained messages:
-
-```bash
-mosquitto_pub -t "homeassistant/sensor/old_device/config" -n -r
-```
-
-### Area assignments don't survive rebuild
-
-The `suggested_area` field only applies when an entity is first created. If HA's area registry is deleted, areas must be recreated and `suggested_area` in discovery will re-apply them. However, **manual area assignments made in HA UI are lost**.
-
-### Authentication tokens invalidated
-
-Fresh `.storage/` means new authentication. Long-lived access tokens used by external services (Node-RED, mobile apps) become invalid. **Mitigation:** Use service accounts with tokens regenerated as part of rebuild process, or persist `.storage/auth*` files.
-
-### MQTT integration config entry
-
-The MQTT broker connection settings are stored in `.storage/core.config_entries`. On fresh container, MQTT integration must be reconfigured. **Workaround:** Use deprecated YAML configuration for MQTT (still functional):
-
-```yaml
-mqtt:
-  broker: mosquitto.local
-  port: 1883
-  username: ha
-  password: !secret mqtt_password
-  discovery: true
-```
+**Ephemeral (safe to wipe):**
+- `.storage/` (entire directory)
+- `home-assistant_v2.db`
 
 ---
 
-## Feasibility assessment
+## Failure Modes & Mitigations
 
-| Requirement | Status | Notes |
-|-------------|--------|-------|
-| Dashboards restored identically | ✅ **Feasible** | YAML mode dashboards fully external |
-| Entity_ids stable across rebuild | ✅ **Feasible** | Requires `default_entity_id` in all discovery payloads |
-| No duplicate entities | ✅ **Feasible** | `unique_id` prevents duplicates; control plane manages uniqueness |
-| No device reconfiguration | ✅ **Feasible** | MQTT discovery recreates device associations |
-| Automations work after rebuild | ✅ **Feasible** | YAML automations with `initial_state: true` |
-| User customizations preserved | ⚠️ **Partial** | Only if controlled via discovery; UI changes lost |
-| Area assignments preserved | ⚠️ **Partial** | `suggested_area` works on fresh creation only |
-| History/statistics preserved | ❌ **Not feasible** | Recorder database is local; use external DB or accept loss |
-
-**Overall: PARTIALLY FEASIBLE** with strict constraints.
+| Failure | Cause | Mitigation |
+|---------|-------|------------|
+| Ghost entities | Retained discovery not cleared on removal | Publish empty retained config on device removal |
+| Entity ID drift | Renamed discovery payload or collision | Pin `default_entity_id`; ensure uniqueness |
+| Broken automations | Device-based triggers | Use entity-based YAML triggers only |
+| UI differences | UI edits stored in `.storage` | YAML-only dashboards and automations |
+| Re-login required | Auth wiped with `.storage` | Accept, or persist `.storage/auth*` files |
+| Duplicate entities | Missing or duplicate `unique_id` | Control plane ensures globally unique IDs |
+| State unavailable | States published before HA ready | Wait 10-15s after birth message before publishing |
+| MQTT not configured | Config entries wiped | Use YAML MQTT config, not UI setup |
 
 ---
 
-## Reference architecture for disposable HA
+## Reference Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    EXTERNAL CONTROL PLANE                    │
-│  (Maintains device registry, entity definitions, state)      │
+│                    EXTERNAL CONTROL PLANE                   │
+│         (Device registry, entity definitions, state)        │
+│         Examples: espro, Zigbee2MQTT, Node-RED, custom      │
 └─────────────────────┬───────────────────────────────────────┘
                       │
                       │ MQTT Discovery + State
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                     MOSQUITTO BROKER                         │
-│  - Retained discovery messages (homeassistant/+/+/config)    │
-│  - State topics (ctrl/+/+/state)                             │
-│  - Birth/LWT (homeassistant/status)                          │
+│                      MQTT BROKER                            │
+│  - Retained discovery: homeassistant/+/+/config             │
+│  - State topics: ctrl/+/+/state                             │
+│  - Birth/LWT: homeassistant/status                          │
 └─────────────────────┬───────────────────────────────────────┘
                       │
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                  HOME ASSISTANT (DISPOSABLE)                 │
-│                                                              │
-│  Persistent (version-controlled):                            │
-│  ├── configuration.yaml (MQTT config, discovery disabled)    │
-│  ├── dashboards/*.yaml (YAML-mode Lovelace)                  │
-│  ├── automations/*.yaml (labeled YAML blocks)                │
-│  └── secrets.yaml                                            │
-│                                                              │
-│  Ephemeral (.storage/):                                      │
-│  ├── core.entity_registry (rebuilt from discovery)           │
-│  ├── core.device_registry (rebuilt from discovery)           │
-│  └── core.config_entries (MQTT configured in YAML)           │
+│               HOME ASSISTANT (DISPOSABLE)                   │
+│                                                             │
+│  Persistent:              │  Ephemeral:                     │
+│  ├── configuration.yaml   │  └── .storage/* (rebuilt from   │
+│  ├── dashboards/*.yaml    │       MQTT discovery)           │
+│  ├── automations/*.yaml   │                                 │
+│  └── secrets.yaml         │                                 │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Minimum viable configuration checklist
+---
 
-1. **MQTT discovery payloads include:** `unique_id`, `default_entity_id`, `device.identifiers`, `suggested_area`
-2. **All discovery messages use retain flag**
-3. **HA configuration excludes:** `default_config`, all discovery integrations, `recorder`
-4. **Dashboards use:** `lovelace: mode: yaml`
-5. **Automations use:** Labeled YAML blocks with `initial_state: true`
-6. **External system handles:** 10-15 second delay after HA birth message before state updates
-7. **MQTT broker credentials in:** `secrets.yaml` (not UI-configured)
+## Validation Checklist
+
+### Pre-Deployment
+
+- [ ] All discovery payloads include `unique_id` and `default_entity_id`
+- [ ] All discovery messages use retain flag
+- [ ] `configuration.yaml` excludes `default_config` and all discovery integrations
+- [ ] Dashboards use `lovelace: mode: yaml`
+- [ ] Automations use labeled YAML blocks with `initial_state: true`
+- [ ] Automations use entity-based triggers only (no device triggers)
+- [ ] MQTT credentials in `secrets.yaml` (not UI-configured)
+- [ ] Control plane handles 10-15s delay after HA birth message
+
+### Litmus Test
+
+Delete HA completely (config + `.storage` + DB) and restart. If any of the following occur, the architecture is **invalid**:
+
+- [ ] Any device must be re-paired
+- [ ] Any entity_id changes
+- [ ] Any automation breaks
+- [ ] Any dashboard card is missing
+
+### Feasibility Summary
+
+| Requirement | Status |
+|-------------|--------|
+| Dashboards restored identically | ✅ Feasible (YAML mode) |
+| Entity IDs stable across rebuild | ✅ Feasible (`default_entity_id`) |
+| No duplicate entities | ✅ Feasible (`unique_id`) |
+| Automations work after rebuild | ✅ Feasible (YAML + `initial_state`) |
+| Device associations preserved | ✅ Feasible (MQTT discovery) |
+| User UI customizations preserved | ⚠️ Partial (discovery-controlled only) |
+| Area assignments preserved | ⚠️ Partial (`suggested_area` on first creation) |
+| History/statistics preserved | ❌ Not feasible (use external DB or accept loss) |
 
 ---
 
 ## Conclusion
 
-Home Assistant can function as a disposable frontend for an external control plane, but only under constrained conditions. The critical enabler is MQTT discovery's `default_entity_id` field, which allows the external system to dictate exact entity_ids that remain stable across HA rebuilds. Combined with YAML-only dashboards and automations, this creates a reproducible UI layer.
+Home Assistant functions as a disposable frontend when treated as a **stateless UI cache**. The critical enablers:
 
-**What works well:** Entity creation, device grouping, basic automations, dashboards—all can be externally controlled and rebuilt identically.
+1. **MQTT discovery** with `default_entity_id` for stable entity identity
+2. **YAML-only** dashboards and automations
+3. **No native integrations**—external control plane owns all devices
 
-**What requires compromise:** User customizations made in HA's UI (friendly names, icons, manual area assignments) will not survive rebuild unless the external control plane handles them via discovery payloads. History and statistics require an external database or must be accepted as ephemeral.
-
-For production deployment, the recommended approach is to treat `.storage/` as **rebuildable cache** rather than truly ephemeral—allowing HA to maintain its registries during normal operation while having the capability to fully reconstruct from external MQTT discovery when needed.
-
-
-# Disposable HASS - ChatGPT
-
-
-## Executive verdict
-
-**Feasible**, with hard constraints.
-HA can be wiped entirely and rebuilt **without user-visible change** *if and only if* HA holds **zero authoritative state**.
-
----
-
-## Core principle
-
-> Home Assistant is a **stateless UI cache**.
-> MQTT + external control plane are the **only source of truth**.
-
----
-
-## Required architectural constraints (non-negotiable)
-
-### 1. Integration model
-
-* **MQTT only**
-* No native HA device integrations
-* No Zigbee/Z-Wave/BLE/USB passed into HA
-* External control plane owns:
-
-  * device pairing
-  * identity
-  * state
-  * availability
-  * automation logic (optionally)
-
-### 2. Discovery model
-
-* **MQTT Discovery required**
-* Every entity **must** provide:
-
-  * `unique_id` (stable, external, never regenerated)
-  * stable name or explicit `default_entity_id`
-* Discovery configs **must be retained**
-  (`homeassistant/.../config` topics with `retain=true`)
-
-OR
-
-* External system republishes discovery on HA birth:
-
-  * listen to `homeassistant/status == online`
-
-### 3. Identity rules
-
-* `unique_id` = canonical identity (MAC / serial / logical ID)
-* `entity_id` must be reproducible:
-
-  * either via `default_entity_id`
-  * or via stable naming rules
-* Never rename entities in HA UI
-* Never rely on HA-generated IDs
-
-### 4. Device model
-
-* Use MQTT `device:` block with stable `identifiers`
-* Use `suggested_area` for auto-room assignment
-* **Never reference HA `device_id` anywhere**
-
----
-
-## What HA state is allowed to be ephemeral
-
-Safe to wipe every time:
-
-* `.storage/`
-* entity registry
-* device registry
-* history DB
-* UI state
-* dashboards (if YAML)
-* automations (if YAML)
-
-Must be provided at startup:
-
-* `configuration.yaml`
-* MQTT connection config
-* Lovelace YAML
-* automation YAML
-
----
-
-## What NOT to use in HA
-
-* UI-created dashboards
-* UI-created automations
-* Device-based triggers/conditions
-* Helpers with restored state (`input_*`)
-* Any feature that persists logic/state in `.storage`
-* Default `default_config` (disable discovery)
-
----
-
-## YAML rules
-
-### configuration.yaml
-
-* No `default_config`
-* Explicitly enable only:
-
-  * `mqtt`
-  * `automation`
-  * `frontend`
-  * `lovelace: mode: yaml`
-
-### Dashboards
-
-* YAML-only (`ui-lovelace.yaml`)
-* Reference **entities only**
-* Never reference devices
-
-### Automations
-
-* YAML-only
-* Entity-based triggers only
-* No device triggers
-* No UI toggles expected to persist
-
----
-
-## Rebuild workflow (target behavior)
-
-1. HA container deleted (config + `.storage` + DB gone)
-2. New HA container starts
-3. Connects to MQTT broker
-4. Broker feeds retained discovery configs
-5. Entities + devices recreated identically
-6. Dashboards load from YAML
-7. Automations activate
-8. User sees **no change**
-
-Expected transient:
-
-* brief `unavailable` until first state publish
-
----
-
-## Known failure modes (and mitigations)
-
-### Ghost entities
-
-**Cause:** retained discovery not cleared
-**Fix:** external control plane must publish empty retained config on removal
-
-### Entity ID drift
-
-**Cause:** renamed discovery payload
-**Fix:** pin `default_entity_id` or keep names immutable
-
-### Broken automations after rebuild
-
-**Cause:** device-based triggers
-**Fix:** entity-based YAML only
-
-### UI differences after rebuild
-
-**Cause:** UI edits stored in `.storage`
-**Fix:** YAML-only UI
-
-### Re-login required
-
-**Cause:** auth wiped
-**Fix:** acceptable, or pre-seed auth files if needed
-
----
-
-## Minimal reference architecture
-
-```
-[ Devices ]
-     |
-[ External control plane ]
-  - Zigbee2MQTT / Node-RED / custom
-  - Owns identity + logic
-     |
-[ MQTT broker ]
-  - retained discovery
-  - retained state (where relevant)
-     |
-[ Home Assistant (Docker) ]
-  - mqtt only
-  - YAML UI + YAML automations
-  - no hardware access
-```
-
----
-
-## Litmus test (use this to validate designs)
-
-If HA is deleted and:
-
-* any device must be re-paired ❌
-* any entity ID changes ❌
-* any automation breaks ❌
-* any dashboard card is missing ❌
-
-→ architecture is **invalid**
-
+The `.storage/` directory becomes rebuildable cache rather than authoritative state. User customizations made in HA's UI will not survive rebuild—all configuration must flow from the external control plane through MQTT discovery payloads.
