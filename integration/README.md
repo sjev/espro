@@ -9,11 +9,7 @@ cd integration
 docker compose up -d
 ```
 
-1. Access Home Assistant at http://localhost:8123
-2. Complete onboarding (create account)
-3. Add MQTT integration: **Settings > Devices & Services > Add Integration > MQTT**
-   - Broker: `mosquitto`
-   - Port: `1883`
+Access Home Assistant at http://localhost:8123 (credentials in snapshot).
 
 ## Services
 
@@ -23,49 +19,78 @@ docker compose up -d
 | MQTT | 1883 | Broker (TCP) |
 | MQTT WebSocket | 9001 | Broker (WS) |
 
-## Home Assistant
-
-* [localhost:8123](http://localhost:8123)
-* user: admin
-* pass: admin123
-
-
-## Reset Home Assistant
-
-Delete HA state while preserving MQTT broker data:
+## Reset
 
 ```bash
 docker compose down
-rm -rf ha-data
+docker volume rm integration_ha-data
 docker compose up -d
 ```
 
-After reset, complete HA onboarding and re-add MQTT integration.
-
-## Full Reset (including MQTT)
-
-```bash
-docker compose down -v
-rm -rf ha-data
-docker compose up -d
-```
+No manual setup needed - snapshot auto-restores with MQTT configured.
 
 ## Architecture
 
-- `configuration.yaml` - Mounted read-only, persists across resets
-- `ha-data/` - HA state directory, delete to reset
-- `mosquitto-data` - Named volume for MQTT persistence
-
-## MQTT Testing
-
-Publish a test message:
-
-```bash
-docker exec mosquitto mosquitto_pub -t "test/topic" -m "hello"
+```
+integration/
+├── docker-compose.yml       # Service orchestration
+├── create-snapshot.sh       # Developer tool: create new snapshot
+├── test_autodiscovery.sh    # Test MQTT autodiscovery
+└── ha/                      # Container files (mounted into HA)
+    ├── configuration.yaml   # Base HA config
+    ├── init-ha.sh           # Container entrypoint
+    └── snapshot/            # Golden .storage state
 ```
 
-Subscribe to all topics:
+**Snapshot lifecycle:**
+- `create-snapshot.sh` runs on your host to create a new snapshot (one-time setup)
+- `ha/init-ha.sh` runs inside the container on every start, restoring the snapshot if `.storage` is missing
+
+## Creating a New Snapshot
+
+If you need to update the snapshot (e.g., change credentials, add integrations):
+
+```bash
+./create-snapshot.sh
+```
+
+The script will guide you through the process.
+
+## MQTT Autodiscovery
+
+Devices publish config to `homeassistant/<component>/<node_id>/<object_id>/config`.
+
+Example sensor:
+
+```bash
+mosquitto_pub -h localhost -t "homeassistant/sensor/mydevice/temperature/config" -m '{
+  "name": "Temperature",
+  "unique_id": "mydevice_temperature",
+  "state_topic": "espro/mydevice/temperature",
+  "unit_of_measurement": "°C",
+  "device": {
+    "identifiers": ["mydevice"],
+    "name": "My Device",
+    "manufacturer": "espro"
+  }
+}'
+```
+
+Then publish state:
+
+```bash
+mosquitto_pub -h localhost -t "espro/mydevice/temperature" -m "23.5"
+```
+
+## Testing
+
+```bash
+./test_autodiscovery.sh
+```
+
+Or manually:
 
 ```bash
 docker exec mosquitto mosquitto_sub -t "#" -v
+docker exec mosquitto mosquitto_pub -t "test/topic" -m "hello"
 ```

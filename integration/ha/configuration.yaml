@@ -1,0 +1,6 @@
+homeassistant:
+  name: Home
+  unit_system: metric
+  time_zone: UTC
+
+default_config:
