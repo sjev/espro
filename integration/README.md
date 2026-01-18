@@ -23,6 +23,13 @@ docker compose up -d
 | MQTT | 1883 | Broker (TCP) |
 | MQTT WebSocket | 9001 | Broker (WS) |
 
+## Home Assistant
+
+* [localhost:8123](http://localhost:8123)
+* user: admin
+* pass: admin123
+
+
 ## Reset Home Assistant
 
 Delete HA state while preserving MQTT broker data:

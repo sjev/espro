@@ -1,5 +1,6 @@
-# hass config files
+# hass files
 home-assistant.log.*
+home-assistant_v2.db*
 
 # dot files
 .*
