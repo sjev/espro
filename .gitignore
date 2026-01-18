@@ -2,6 +2,7 @@
 .*
 .*/
 !.gitignore
+!integration/ha/snapshot/.storage
 
 # temp files
 temp/

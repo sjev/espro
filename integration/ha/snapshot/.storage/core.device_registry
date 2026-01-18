@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "minor_version": 12,
+  "key": "core.device_registry",
+  "data": {
+    "devices": [
+      {"area_id":null,"config_entries":["01KF9QFDC6HG343NXAFPF5QAE9"],"config_entries_subentries":{"01KF9QFDC6HG343NXAFPF5QAE9":[null]},"configuration_url":null,"connections":[],"created_at":"2026-01-18T23:36:36.491165+00:00","disabled_by":null,"entry_type":"service","hw_version":null,"id":"91b459498482115aa7270da6630bcb0d","identifiers":[["sun","01KF9QFDC6HG343NXAFPF5QAE9"]],"labels":[],"manufacturer":null,"model":null,"model_id":null,"modified_at":"2026-01-18T23:36:36.491261+00:00","name_by_user":null,"name":"Sun","primary_config_entry":"01KF9QFDC6HG343NXAFPF5QAE9","serial_number":null,"sw_version":null,"via_device_id":null},
+      {"area_id":null,"config_entries":["01KF9QFDXKMXF3ASNKZ1CBBYRM"],"config_entries_subentries":{"01KF9QFDXKMXF3ASNKZ1CBBYRM":[null]},"configuration_url":"homeassistant://config/backup","connections":[],"created_at":"2026-01-18T23:36:37.093362+00:00","disabled_by":null,"entry_type":"service","hw_version":null,"id":"12809153cfcea21556d7ac60041efef0","identifiers":[["backup","backup_manager"]],"labels":[],"manufacturer":"Home Assistant","model":"Home Assistant Backup","model_id":null,"modified_at":"2026-01-18T23:36:37.093437+00:00","name_by_user":null,"name":"Backup","primary_config_entry":"01KF9QFDXKMXF3ASNKZ1CBBYRM","serial_number":null,"sw_version":"2026.1.2","via_device_id":null}
+    ],
+    "deleted_devices": []
+  }
+}

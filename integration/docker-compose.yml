@@ -1,0 +1,28 @@
+services:
+  mosquitto:
+    restart: unless-stopped
+    container_name: mosquitto
+    image: roxauto/mosquitto:latest
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+
+  homeassistant:
+    restart: unless-stopped
+    container_name: homeassistant
+    image: ghcr.io/home-assistant/home-assistant:stable
+    ports:
+      - "8123:8123"
+    volumes:
+      - ha-data:/config
+      - ./ha/configuration.yaml:/config/configuration.yaml:ro
+      - ./ha/snapshot:/snapshot:ro
+      - ./ha/init-ha.sh:/init-ha.sh:ro
+    entrypoint: ["/bin/bash", "/init-ha.sh"]
+    environment:
+      - TZ=UTC
+    depends_on:
+      - mosquitto
+
+volumes:
+  ha-data:
