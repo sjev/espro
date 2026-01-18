@@ -1,6 +1,11 @@
-# hass files
-home-assistant.log.*
-home-assistant_v2.db*
+# hass runtime files (only track configuration.yaml and blueprints/)
+integration/ha-data/home-assistant.log*
+integration/ha-data/home-assistant_v2.db*
+integration/ha-data/.storage/
+integration/ha-data/deps/
+integration/ha-data/tts/
+integration/ha-data/.cloud/
+integration/ha-data/.ha_run.lock
 
 # dot files
 .*
