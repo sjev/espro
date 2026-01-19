@@ -9,7 +9,12 @@ cd integration
 docker compose up -d
 ```
 
-Access Home Assistant at http://localhost:8123 (credentials in snapshot).
+Access Home Assistant at http://localhost:8123 .
+
+Credentials:
+
+* user: admin
+* pass: admin123
 
 ## Services
 
